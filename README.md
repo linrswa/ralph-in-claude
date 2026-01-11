@@ -16,6 +16,8 @@ Based on [Geoffrey Huntley's Ralph pattern](https://ghuntley.com/ralph/).
 
 ## Setup
 
+### Option 1: Copy to your project
+
 Copy the ralph files into your project:
 
 ```bash
@@ -26,24 +28,43 @@ cp /path/to/ralph_claude_code/prompt.md scripts/ralph/
 chmod +x scripts/ralph/ralph.sh
 ```
 
-Optionally, copy `CLAUDE.md` to your project root for PRD generation guidance.
+### Option 2: Install skills globally
+
+Copy the skills to your Claude Code config for use across all projects:
+
+```bash
+cp -r .claude/skills/prd ~/.claude/skills/
+cp -r .claude/skills/ralph ~/.claude/skills/
+```
+
+This enables `/prd` and `/ralph` commands in any project.
 
 ## Workflow
 
 ### 1. Create a PRD
 
-Ask Claude Code to generate a PRD for your feature:
+Use the `/prd` skill to generate a PRD:
 
+```
+/prd [your feature description]
+```
+
+Or ask Claude Code directly:
 ```
 Create a PRD for [your feature description]
 ```
 
-Follow the format in `CLAUDE.md`. Answer clarifying questions. Save output to `tasks/prd-[feature-name].md`.
+Answer the clarifying questions. Output saves to `tasks/prd-[feature-name].md`.
 
 ### 2. Convert PRD to Ralph format
 
-Ask Claude Code to convert the markdown PRD to JSON:
+Use the `/ralph` skill to convert the PRD:
 
+```
+/ralph tasks/prd-[feature-name].md
+```
+
+Or ask Claude Code directly:
 ```
 Convert tasks/prd-[feature-name].md to prd.json format for Ralph
 ```
@@ -78,6 +99,8 @@ Ralph will:
 | `prd.json.example` | Example PRD format for reference |
 | `progress.txt` | Append-only learnings for future iterations |
 | `CLAUDE.md` | Project instructions for Claude Code |
+| `.claude/skills/prd/` | Skill for generating PRDs (`/prd`) |
+| `.claude/skills/ralph/` | Skill for converting PRDs to JSON (`/ralph`) |
 | `flowchart/` | Interactive visualization of how Ralph works |
 
 ## Flowchart
@@ -173,7 +196,7 @@ Ralph automatically archives previous runs when you start a new feature (differe
 | Feature | Amp Version | Claude Code Version |
 |---------|-------------|---------------------|
 | CLI command | `amp --dangerously-allow-all` | `claude --dangerously-skip-permissions -p` |
-| Skills | `skills/*/SKILL.md` | `CLAUDE.md` |
+| Skills location | `skills/*/SKILL.md` | `.claude/skills/*/SKILL.md` |
 | Config files | `AGENTS.md` | `CLAUDE.md` |
 | Browser testing | `dev-browser` skill | Manual or MCP-based |
 | Thread tracking | `$AMP_CURRENT_THREAD_ID` | Not available |
