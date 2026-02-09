@@ -7,11 +7,22 @@ description: "Convert PRDs to prd.json format for the Ralph autonomous agent sys
 
 Converts existing PRDs to the prd.json format that Ralph uses for autonomous execution.
 
+**CRITICAL: When asking the user questions (e.g., confirming baseBranch), ALWAYS use the `AskUserQuestion` tool. Do NOT output questions as plain text. The `AskUserQuestion` tool provides an interactive UI with selectable options.**
+
 ---
 
 ## The Job
 
-Take a PRD (markdown file or text) and convert it to `prd.json` in your ralph directory.
+1. Take a PRD (markdown file or text)
+2. **Ask the user to confirm the `baseBranch`** using the `AskUserQuestion` tool. Provide options based on:
+   - The current git branch (check with `git branch --show-current`)
+   - `main` branch
+   - Other common branches if relevant
+3. **Extract implementation details** from the PRD (architecture decisions, APIs, data structures, code patterns) and include them in relevant story `notes` fields
+4. **Record the source PRD path** in `sourcePrd` field so Ralph can reference it during implementation
+5. Convert to `prd.json` in your ralph directory
+
+**IMPORTANT:** Always use the `AskUserQuestion` tool when asking for user input. This provides an interactive UI with selectable options.
 
 ---
 
@@ -21,6 +32,8 @@ Take a PRD (markdown file or text) and convert it to `prd.json` in your ralph di
 {
   "project": "[Project Name]",
   "branchName": "ralph/[feature-name-kebab-case]",
+  "baseBranch": "[base branch to create from, e.g. main or feature-branch]",
+  "sourcePrd": "[path to original PRD file, e.g. docs/prd/feature.md]",
   "description": "[Feature description from PRD title/intro]",
   "userStories": [
     {
@@ -118,9 +131,11 @@ For stories with testable logic, also include:
 1. **Each user story becomes one JSON entry**
 2. **IDs**: Sequential (US-001, US-002, etc.)
 3. **Priority**: Based on dependency order, then document order
-4. **All stories**: `passes: false` and empty `notes`
-5. **branchName**: Derive from feature name, kebab-case, prefixed with `ralph/`
-6. **Always add**: "Typecheck passes" to every story's acceptance criteria
+4. **All stories**: `passes: false`
+5. **notes field**: If the source PRD contains implementation details for a story (architecture decisions, specific APIs, data structures, code patterns, file locations), extract and include them in the notes field. Otherwise leave empty.
+6. **sourcePrd**: Path to the original PRD file (relative to project root). Ralph will read this file during implementation for additional context.
+7. **branchName**: Derive from feature name, kebab-case, prefixed with `ralph/`
+8. **Always add**: "Typecheck passes" to every story's acceptance criteria
 
 ---
 
@@ -163,6 +178,8 @@ Add ability to mark tasks with different statuses.
 {
   "project": "TaskApp",
   "branchName": "ralph/task-status",
+  "baseBranch": "main",
+  "sourcePrd": "docs/prd/task-status.md",
   "description": "Task Status Feature - Track task progress with status indicators",
   "userStories": [
     {
@@ -176,7 +193,7 @@ Add ability to mark tasks with different statuses.
       ],
       "priority": 1,
       "passes": false,
-      "notes": ""
+      "notes": "Use Prisma enum type. See PRD section 2.1 for status transition rules."
     },
     {
       "id": "US-002",
@@ -237,3 +254,5 @@ Before writing prd.json, verify:
 - [ ] UI stories have "Verify in browser" as criterion
 - [ ] Acceptance criteria are verifiable (not vague)
 - [ ] No story depends on a later story
+- [ ] sourcePrd points to the original PRD file path
+- [ ] Implementation details from PRD are captured in relevant story notes
