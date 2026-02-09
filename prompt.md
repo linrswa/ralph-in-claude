@@ -7,13 +7,24 @@ You are an autonomous coding agent working on a software project.
 1. Read the PRD at `prd.json` (in the same directory as this file)
 2. Read the progress log at `progress.txt` (check Codebase Patterns section first)
 3. Check you're on the correct branch from PRD `branchName`. If not, check it out or create from `baseBranch` (defaults to main if not specified).
-4. Pick the **highest priority** user story where `passes: false`
+4. Pick the **highest priority** user story where `passes: false` **and all dependencies are satisfied** (see Dependency Rules below)
 5. Implement that single user story
 6. Run quality checks (e.g., typecheck, lint, test - use whatever your project requires)
 7. Update CLAUDE.md files if you discover reusable patterns (see below)
 8. If checks pass, commit ALL changes with message: `feat: [Story ID] - [Story Title]`
 9. Update the PRD to set `passes: true` for the completed story
 10. Append your progress to `progress.txt`
+
+## Dependency Rules
+
+Each story has a `dependsOn` field — an array of story IDs that must have `passes: true` before this story can be picked.
+
+**Selection algorithm:**
+1. Filter stories to those where `passes: false`
+2. Among those, filter to stories whose `dependsOn` IDs all have `passes: true`
+3. Pick the one with the lowest `priority` number
+
+**Example:** If US-003 has `"dependsOn": ["US-001"]` and US-001 still has `passes: false`, then US-003 is NOT eligible even if it has a lower priority number than other stories.
 
 ## Progress Report Format
 

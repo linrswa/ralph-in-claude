@@ -14,6 +14,7 @@
         "Generate and run migration successfully",
         "Typecheck passes"
       ],
+      "dependsOn": [],
       "priority": 1,
       "passes": false,
       "notes": ""
@@ -28,6 +29,7 @@
         "Typecheck passes",
         "Verify in browser using dev-browser skill"
       ],
+      "dependsOn": ["US-001"],
       "priority": 2,
       "passes": false,
       "notes": ""
@@ -43,6 +45,7 @@
         "Typecheck passes",
         "Verify in browser using dev-browser skill"
       ],
+      "dependsOn": ["US-001"],
       "priority": 3,
       "passes": false,
       "notes": ""
@@ -58,6 +61,7 @@
         "Typecheck passes",
         "Verify in browser using dev-browser skill"
       ],
+      "dependsOn": ["US-002", "US-003"],
       "priority": 4,
       "passes": false,
       "notes": ""

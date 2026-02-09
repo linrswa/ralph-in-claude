@@ -45,6 +45,7 @@ Converts existing PRDs to the prd.json format that Ralph uses for autonomous exe
         "Criterion 2",
         "Typecheck passes"
       ],
+      "dependsOn": [],
       "priority": 1,
       "passes": false,
       "notes": ""
@@ -78,13 +79,16 @@ Ralph spawns a fresh Claude instance per iteration with no memory of previous wo
 
 ## Story Ordering: Dependencies First
 
-Stories execute in priority order. Earlier stories must not depend on later ones.
+Stories execute in priority order, filtered by dependency readiness. Use `dependsOn` to express inter-story dependencies explicitly.
+
+- **`dependsOn`** (required): An array of story IDs that must have `passes: true` before this story can be picked. Use `[]` for root stories with no dependencies.
+- **`priority`**: Among stories whose dependencies are all satisfied, the lowest priority number is picked first.
 
 **Correct order:**
-1. Schema/database changes (migrations)
-2. Server actions / backend logic
-3. UI components that use the backend
-4. Dashboard/summary views that aggregate data
+1. Schema/database changes (migrations) — `dependsOn: []`
+2. Server actions / backend logic — `dependsOn: ["US-001"]`
+3. UI components that use the backend — `dependsOn: ["US-001"]` or `["US-002"]`
+4. Dashboard/summary views that aggregate data — `dependsOn: ["US-002", "US-003"]`
 
 **Wrong order:**
 1. UI component (depends on schema that does not exist yet)
@@ -136,6 +140,7 @@ For stories with testable logic, also include:
 6. **sourcePrd**: Path to the original PRD file (relative to project root). Ralph will read this file during implementation for additional context.
 7. **branchName**: Derive from feature name, kebab-case, prefixed with `ralph/`
 8. **Always add**: "Typecheck passes" to every story's acceptance criteria
+9. **dependsOn**: Analyze the PRD for inter-story dependencies. Set `dependsOn` to an array of story IDs that must be completed before this story can start. Root stories (no dependencies) use `[]`. If a story uses a schema added by another story, it depends on that story.
 
 ---
 
@@ -191,6 +196,7 @@ Add ability to mark tasks with different statuses.
         "Generate and run migration successfully",
         "Typecheck passes"
       ],
+      "dependsOn": [],
       "priority": 1,
       "passes": false,
       "notes": "Use Prisma enum type. See PRD section 2.1 for status transition rules."
@@ -205,6 +211,7 @@ Add ability to mark tasks with different statuses.
         "Typecheck passes",
         "Verify in browser"
       ],
+      "dependsOn": ["US-001"],
       "priority": 2,
       "passes": false,
       "notes": ""
@@ -220,6 +227,7 @@ Add ability to mark tasks with different statuses.
         "Typecheck passes",
         "Verify in browser"
       ],
+      "dependsOn": ["US-001"],
       "priority": 3,
       "passes": false,
       "notes": ""
@@ -234,6 +242,7 @@ Add ability to mark tasks with different statuses.
         "Typecheck passes",
         "Verify in browser"
       ],
+      "dependsOn": ["US-002", "US-003"],
       "priority": 4,
       "passes": false,
       "notes": ""
@@ -256,3 +265,6 @@ Before writing prd.json, verify:
 - [ ] No story depends on a later story
 - [ ] sourcePrd points to the original PRD file path
 - [ ] Implementation details from PRD are captured in relevant story notes
+- [ ] Every story has a `dependsOn` array (use `[]` for root stories)
+- [ ] `dependsOn` references are valid story IDs within this PRD
+- [ ] `dependsOn` graph has no cycles (forms a valid DAG)

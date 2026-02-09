@@ -61,6 +61,7 @@ Convert a PRD markdown file to Ralph's JSON format:
       "title": "[Story title]",
       "description": "As a [user], I want [feature] so that [benefit]",
       "acceptanceCriteria": ["Criterion 1", "Typecheck passes"],
+      "dependsOn": [],
       "priority": 1,
       "passes": false,
       "notes": ""
@@ -74,6 +75,7 @@ Convert a PRD markdown file to Ralph's JSON format:
 - Order by dependency: schema → backend → frontend
 - Always include "Typecheck passes" in acceptance criteria
 - For UI stories, include browser verification
+- Every story must have a `dependsOn` array declaring inter-story dependencies (story IDs). Stories won't be picked until all dependencies have `passes: true`. Use `[]` for root stories with no dependencies.
 
 ## Key Files
 
