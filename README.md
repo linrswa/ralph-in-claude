@@ -80,7 +80,7 @@ This creates `prd.json` with user stories structured for autonomous execution.
 Default is 10 iterations.
 
 Ralph will:
-1. Create a feature branch (from PRD `branchName`)
+1. Create a feature branch (`branchName`) from `baseBranch` (defaults to `main`)
 2. Pick the highest priority story where `passes: false`
 3. Implement that single story
 4. Run quality checks (typecheck, tests)
@@ -95,7 +95,7 @@ Ralph will:
 |------|---------|
 | `ralph.sh` | The bash loop that spawns fresh Claude instances |
 | `prompt.md` | Instructions given to each Claude instance |
-| `prd.json` | User stories with `passes` status (the task list) |
+| `prd.json` | User stories with `passes` status; includes `sourcePrd` path to the original PRD |
 | `prd.json.example` | Example PRD format for reference |
 | `progress.txt` | Append-only learnings for future iterations |
 | `CLAUDE.md` | Project instructions for Claude Code |

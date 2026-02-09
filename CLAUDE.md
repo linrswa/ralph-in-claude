@@ -52,6 +52,8 @@ Convert a PRD markdown file to Ralph's JSON format:
 {
   "project": "[Project Name]",
   "branchName": "ralph/[feature-name]",
+  "baseBranch": "main",
+  "sourcePrd": "tasks/prd-[feature-name].md",
   "description": "[Feature description]",
   "userStories": [
     {
