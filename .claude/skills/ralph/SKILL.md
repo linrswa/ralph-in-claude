@@ -1,6 +1,16 @@
 ---
 name: ralph
 description: "Convert PRDs to prd.json format for the Ralph autonomous agent system. Use when you have an existing PRD and need to convert it to Ralph's JSON format. Triggers on: convert this prd, turn this into ralph format, create prd.json from this, ralph json."
+hooks:
+  PreToolUse:
+    - matcher: "Write"
+      hooks:
+        - type: command
+          command: ".claude/hooks/ensure-ralph-dir.sh"
+          timeout: 5
+        - type: command
+          command: ".claude/hooks/validate-prd-write.sh"
+          timeout: 10
 ---
 
 # Ralph PRD Converter
@@ -20,7 +30,7 @@ Converts existing PRDs to the prd.json format that Ralph uses for autonomous exe
    - Other common branches if relevant
 3. **Extract implementation details** from the PRD (architecture decisions, APIs, data structures, code patterns) and include them in relevant story `notes` fields
 4. **Record the source PRD path** in `sourcePrd` field so Ralph can reference it during implementation
-5. Convert to `prd.json` in your ralph directory
+5. Write the output to `ralph/prd.json` (the hook auto-creates the `ralph/` directory)
 
 **IMPORTANT:** Always use the `AskUserQuestion` tool when asking for user input. This provides an interactive UI with selectable options.
 
@@ -268,3 +278,4 @@ Before writing prd.json, verify:
 - [ ] Every story has a `dependsOn` array (use `[]` for root stories)
 - [ ] `dependsOn` references are valid story IDs within this PRD
 - [ ] `dependsOn` graph has no cycles (forms a valid DAG)
+

@@ -85,6 +85,18 @@ Convert a PRD markdown file to Ralph's JSON format:
 | `prompt.md` | Instructions given to each Claude iteration |
 | `prd.json` | Current PRD with story status tracking |
 | `progress.txt` | Append-only log of learnings |
+| `.claude/hooks/validate-prd-write.sh` | PreToolUse hook — validates prd.json schema on Write |
+| `.claude/settings.json` | Hooks configuration for Claude Code |
+
+## PRD Schema Validation
+
+`.claude/hooks/validate-prd-write.sh` validates prd.json structure. The Ralph skill runs it automatically after writing prd.json:
+
+```bash
+bash .claude/hooks/validate-prd-write.sh prd.json
+```
+
+Checks: valid JSON, required top-level fields (`project`, `branchName`, `userStories`), required story fields (`id`, `title`, `acceptanceCriteria`, `dependsOn`, `priority`, `passes`), and `dependsOn` reference integrity.
 
 ## Story Sizing
 
