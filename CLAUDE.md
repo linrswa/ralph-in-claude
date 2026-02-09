@@ -85,18 +85,17 @@ Convert a PRD markdown file to Ralph's JSON format:
 | `prompt.md` | Instructions given to each Claude iteration |
 | `prd.json` | Current PRD with story status tracking |
 | `progress.txt` | Append-only log of learnings |
-| `.claude/hooks/validate-prd-write.sh` | PreToolUse hook — validates prd.json schema on Write |
-| `.claude/settings.json` | Hooks configuration for Claude Code |
+| `.claude/hooks/ensure-ralph-dir.sh` | Skill hook — auto-creates `ralph/` directory before writes |
+| `.claude/hooks/validate-prd-write.sh` | Skill hook — validates prd.json schema before writes |
 
 ## PRD Schema Validation
 
-`.claude/hooks/validate-prd-write.sh` validates prd.json structure. The Ralph skill runs it automatically after writing prd.json:
+Ralph skill 定義了 PreToolUse hooks（見 `.claude/skills/ralph/SKILL.md` frontmatter），在 Write tool 執行前自動觸發：
 
-```bash
-bash .claude/hooks/validate-prd-write.sh prd.json
-```
+1. **`ensure-ralph-dir.sh`** — 確保 `ralph/` 目錄存在
+2. **`validate-prd-write.sh`** — 驗證 prd.json schema（合法 JSON、必要欄位、`dependsOn` 引用完整性），失敗則阻擋寫入
 
-Checks: valid JSON, required top-level fields (`project`, `branchName`, `userStories`), required story fields (`id`, `title`, `acceptanceCriteria`, `dependsOn`, `priority`, `passes`), and `dependsOn` reference integrity.
+Hooks 只在 Ralph skill 執行期間生效，不影響其他操作。
 
 ## Story Sizing
 

@@ -1,36 +1,68 @@
-# Ralph (Claude Code Version)
+# Ralph for Claude Code
 
 ![Ralph](ralph.webp)
 
-Ralph is an autonomous AI agent loop that runs [Claude Code](https://claude.ai/code) repeatedly until all PRD items are complete. Each iteration is a fresh Claude instance with clean context. Memory persists via git history, `progress.txt`, and `prd.json`.
+An autonomous AI agent system for [Claude Code](https://claude.ai/code) that iteratively implements features from a PRD. Inspired by [Geoffrey Huntley's Ralph pattern](https://ghuntley.com/ralph/).
 
-Based on [Geoffrey Huntley's Ralph pattern](https://ghuntley.com/ralph/).
+## Background
 
-> This is the Claude Code adaptation of the original [Amp-based Ralph](https://github.com/snarktank/ralph).
+The original [Ralph](https://github.com/snarktank/ralph) was built for Amp. This project started as a Claude Code adaptation of that pattern — a simple bash loop (`ralph.sh`) that spawns fresh Claude instances sequentially.
 
-## Prerequisites
+Now it's evolving into something more: leveraging Claude Code's native capabilities (Task system, Skills, Hooks) to build a smarter orchestration layer with **dependency-aware parallel execution** and **hard-enforced quality gates**.
 
-- [Claude Code CLI](https://claude.ai/code) installed and authenticated
-- `jq` installed (`brew install jq` on macOS, `apt install jq` on Ubuntu)
-- A git repository for your project
+## Architecture
 
-## Setup
+### v1: Sequential Bash Loop (current, stable)
 
-### Option 1: Copy to your project
-
-Copy the ralph files into your project:
-
-```bash
-# From your project root
-mkdir -p scripts/ralph
-cp /path/to/ralph_claude_code/ralph.sh scripts/ralph/
-cp /path/to/ralph_claude_code/prompt.md scripts/ralph/
-chmod +x scripts/ralph/ralph.sh
+```
+ralph.sh
+  └─ for loop (max N iterations)
+       └─ claude -p prompt.md
+            └─ Read prd.json → pick highest-priority story
+            └─ Implement → typecheck → commit → set passes: true
+            └─ Write progress.txt
+       └─ Check <promise>COMPLETE</promise> → exit or continue
 ```
 
-### Option 2: Install skills globally
+Each iteration is a fresh Claude instance with no shared memory. State persists via `prd.json`, `progress.txt`, and git history.
 
-Copy the skills to your Claude Code config for use across all projects:
+### v2: Native Claude Code Integration (in progress)
+
+```
+User invokes Ralph skill
+  └─ Main Claude session (orchestrator)
+       ├─ Parse prd.json dependency graph (dependsOn)
+       ├─ TaskCreate for each story (with blockedBy relations)
+       ├─ Parallel spawn independent stories via Task tool
+       ├─ Hooks enforce quality checks before commits
+       ├─ Hooks validate prd.json schema on write
+       ├─ On story completion → unlock downstream tasks
+       └─ Repeat until all stories pass
+```
+
+Key improvements over v1:
+
+| | v1 (ralph.sh) | v2 (native) |
+|---|---|---|
+| Orchestration | External bash loop | Main Claude session |
+| Execution | Strictly sequential | Parallel via dependency DAG |
+| Quality checks | Soft (prompt instructions) | Hard (Hooks block bad commits) |
+| Dependencies | Linear priority numbers | `dependsOn` DAG with topological ordering |
+| Error recovery | Blind retry next iteration | Orchestrator can intervene and re-dispatch |
+
+See [plan.md](plan.md) for the full v2 design document.
+
+## Quick Start
+
+### Prerequisites
+
+- [Claude Code CLI](https://claude.ai/code) installed and authenticated
+- `jq` installed (`brew install jq` / `apt install jq`)
+- A git repository for your project
+
+### Install Skills
+
+Copy skills to your Claude Code config for use across all projects:
 
 ```bash
 cp -r .claude/skills/prd ~/.claude/skills/
@@ -39,170 +71,108 @@ cp -r .claude/skills/ralph ~/.claude/skills/
 
 This enables `/prd` and `/ralph` commands in any project.
 
-## Workflow
+### Workflow
 
-### 1. Create a PRD
-
-Use the `/prd` skill to generate a PRD:
+**1. Create a PRD**
 
 ```
 /prd [your feature description]
 ```
 
-Or ask Claude Code directly:
-```
-Create a PRD for [your feature description]
-```
-
 Answer the clarifying questions. Output saves to `tasks/prd-[feature-name].md`.
 
-### 2. Convert PRD to Ralph format
-
-Use the `/ralph` skill to convert the PRD:
+**2. Convert to Ralph format**
 
 ```
 /ralph tasks/prd-[feature-name].md
 ```
 
-Or ask Claude Code directly:
-```
-Convert tasks/prd-[feature-name].md to prd.json format for Ralph
-```
+This creates `ralph/prd.json` with user stories structured for autonomous execution.
 
-This creates `prd.json` with user stories structured for autonomous execution.
-
-### 3. Run Ralph
+**3. Run Ralph (v1)**
 
 ```bash
-./scripts/ralph/ralph.sh [max_iterations]
+./ralph.sh [max_iterations]  # default: 10
 ```
 
-Default is 10 iterations.
-
 Ralph will:
-1. Create a feature branch (`branchName`) from `baseBranch` (defaults to `main`)
-2. Pick the highest priority story where `passes: false`
-3. Implement that single story
-4. Run quality checks (typecheck, tests)
-5. Commit if checks pass
-6. Update `prd.json` to mark story as `passes: true`
-7. Append learnings to `progress.txt`
-8. Repeat until all stories pass or max iterations reached
+1. Create a feature branch from `baseBranch`
+2. Pick the highest-priority story where `passes: false` and all `dependsOn` are satisfied
+3. Implement, run quality checks, commit
+4. Mark story as `passes: true`, append learnings to `progress.txt`
+5. Repeat until all stories pass or max iterations reached
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `ralph.sh` | The bash loop that spawns fresh Claude instances |
+| `ralph.sh` | v1 bash loop — spawns fresh Claude instances |
 | `prompt.md` | Instructions given to each Claude instance |
-| `prd.json` | User stories with `passes` status; includes `sourcePrd` path to the original PRD |
-| `prd.json.example` | Example PRD format for reference |
-| `progress.txt` | Append-only learnings for future iterations |
-| `CLAUDE.md` | Project instructions for Claude Code |
+| `prd.json` | User stories with status tracking and dependency graph |
+| `prd.json.example` | Example format for reference |
+| `progress.txt` | Append-only learnings across iterations |
+| `plan.md` | v2 architecture design document |
 | `.claude/skills/prd/` | Skill for generating PRDs (`/prd`) |
 | `.claude/skills/ralph/` | Skill for converting PRDs to JSON (`/ralph`) |
-| `flowchart/` | Interactive visualization of how Ralph works |
+| `.claude/hooks/` | Validation hooks (prd.json schema, directory setup) |
 
-## Flowchart
+## Core Concepts
 
-[![Ralph Flowchart](ralph-flowchart.png)](https://snarktank.github.io/ralph/)
+### Story Sizing
 
-**[View Interactive Flowchart](https://snarktank.github.io/ralph/)** - Click through to see each step with animations.
+Each story must be completable in **one iteration** (one context window). If the LLM runs out of context, it produces broken code.
 
-The `flowchart/` directory contains the source code. To run locally:
+**Right-sized:** Add a DB column, create a UI component, update a server action, add a filter dropdown.
 
-```bash
-cd flowchart
-npm install
-npm run dev
+**Too big (split these):** "Build entire dashboard", "Add authentication", "Refactor the API".
+
+**Rule of thumb:** If you can't describe the change in 2-3 sentences, it's too big.
+
+### Dependency Graph
+
+Stories declare dependencies via `dependsOn`:
+
+```json
+{
+  "id": "US-003",
+  "dependsOn": ["US-001", "US-002"],
+  "priority": 3
+}
 ```
 
-## Critical Concepts
+- `dependsOn: []` — no dependencies, can execute immediately
+- Stories won't be picked until all dependencies have `passes: true`
+- `priority` breaks ties among stories at the same dependency level
 
-### Each Iteration = Fresh Context
+### Knowledge Transfer
 
-Each iteration spawns a **new Claude instance** with clean context. The only memory between iterations is:
-- Git history (commits from previous iterations)
-- `progress.txt` (learnings and context)
-- `prd.json` (which stories are done)
+Between iterations, knowledge persists through:
+- **`progress.txt`** — append-only learnings and codebase patterns
+- **`CLAUDE.md`** — reusable patterns that Claude Code auto-reads
+- **Git history** — committed code from previous iterations
 
-### Small Tasks
+### Quality Gates
 
-Each PRD item should be small enough to complete in one context window. If a task is too big, the LLM runs out of context before finishing and produces poor code.
-
-Right-sized stories:
-- Add a database column and migration
-- Add a UI component to an existing page
-- Update a server action with new logic
-- Add a filter dropdown to a list
-
-Too big (split these):
-- "Build the entire dashboard"
-- "Add authentication"
-- "Refactor the API"
-
-### CLAUDE.md Updates Are Critical
-
-After each iteration, Ralph updates the relevant `CLAUDE.md` files with learnings. This is key because Claude Code automatically reads these files, so future iterations (and future human developers) benefit from discovered patterns, gotchas, and conventions.
-
-Examples of what to add to CLAUDE.md:
-- Patterns discovered ("this codebase uses X for Y")
-- Gotchas ("do not forget to update Z when changing W")
-- Useful context ("the settings panel is in component X")
-
-### Feedback Loops
-
-Ralph only works if there are feedback loops:
-- Typecheck catches type errors
-- Tests verify behavior
-- CI must stay green (broken code compounds across iterations)
-
-### Browser Verification for UI Stories
-
-Frontend stories should include browser verification in acceptance criteria. Start the dev server and manually verify, or use browser automation tools if available.
-
-### Stop Condition
-
-When all stories have `passes: true`, Ralph outputs `<promise>COMPLETE</promise>` and the loop exits.
+v1 relies on prompt instructions for quality checks. v2 uses Hooks to enforce them:
+- **Pre-commit hook** — blocks `git commit` if typecheck/lint fails
+- **prd.json validation hook** — blocks writes with invalid JSON or missing fields
+- **`dependsOn` integrity check** — ensures all referenced story IDs exist
 
 ## Debugging
 
-Check current state:
-
 ```bash
-# See which stories are done
-cat prd.json | jq '.userStories[] | {id, title, passes}'
+# See story status
+jq '.userStories[] | {id, title, passes, dependsOn}' prd.json
 
-# See learnings from previous iterations
+# See learnings
 cat progress.txt
 
 # Check git history
 git log --oneline -10
 ```
 
-## Customizing prompt.md
-
-Edit `prompt.md` to customize Ralph's behavior for your project:
-- Add project-specific quality check commands
-- Include codebase conventions
-- Add common gotchas for your stack
-
-## Archiving
-
-Ralph automatically archives previous runs when you start a new feature (different `branchName`). Archives are saved to `archive/YYYY-MM-DD-feature-name/`.
-
-## Differences from Amp Version
-
-| Feature | Amp Version | Claude Code Version |
-|---------|-------------|---------------------|
-| CLI command | `amp --dangerously-allow-all` | `claude --dangerously-skip-permissions -p` |
-| Skills location | `skills/*/SKILL.md` | `.claude/skills/*/SKILL.md` |
-| Config files | `AGENTS.md` | `CLAUDE.md` |
-| Browser testing | `dev-browser` skill | Manual or MCP-based |
-| Thread tracking | `$AMP_CURRENT_THREAD_ID` | Not available |
-
 ## References
 
-- [Geoffrey Huntley's Ralph article](https://ghuntley.com/ralph/)
+- [Geoffrey Huntley's Ralph article](https://ghuntley.com/ralph/) — the original concept
+- [Original Amp-based Ralph](https://github.com/snarktank/ralph) — the Amp implementation this project was inspired by
 - [Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code)
-- [Original Amp-based Ralph](https://github.com/snarktank/ralph)
