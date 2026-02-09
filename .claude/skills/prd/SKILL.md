@@ -7,6 +7,8 @@ description: "Generate a Product Requirements Document (PRD) for a new feature. 
 
 Create detailed Product Requirements Documents that are clear, actionable, and suitable for implementation.
 
+**CRITICAL: When asking clarifying questions, ALWAYS use the `AskUserQuestion` tool. Do NOT output questions as plain text. The `AskUserQuestion` tool provides an interactive UI with selectable options.**
+
 ---
 
 ## The Job
@@ -29,29 +31,15 @@ Ask only critical questions where the initial prompt is ambiguous. Focus on:
 - **Scope/Boundaries:** What should it NOT do?
 - **Success Criteria:** How do we know it's done?
 
-### Format Questions Like This:
+**IMPORTANT:** You MUST use the `AskUserQuestion` tool to ask these questions. This provides an interactive UI with selectable options instead of plain text. Structure your questions with 2-4 options each.
 
-```
-1. What is the primary goal of this feature?
-   A. Improve user onboarding experience
-   B. Increase user retention
-   C. Reduce support burden
-   D. Other: [please specify]
+### Example Questions:
 
-2. Who is the target user?
-   A. New users only
-   B. Existing users only
-   C. All users
-   D. Admin users only
+- "What is the primary goal of this feature?" with options like "Improve user onboarding", "Increase retention", "Reduce support burden"
+- "Who is the target user?" with options like "New users only", "Existing users", "All users", "Admin users"
+- "What is the scope?" with options like "Minimal viable version", "Full-featured implementation", "Backend/API only", "UI only"
 
-3. What is the scope?
-   A. Minimal viable version
-   B. Full-featured implementation
-   C. Just the backend/API
-   D. Just the UI
-```
-
-This lets users respond with "1A, 2C, 3B" for quick iteration.
+The user can always select "Other" to provide custom input.
 
 ---
 
