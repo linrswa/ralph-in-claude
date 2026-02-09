@@ -469,9 +469,9 @@ exit 0
 
 ---
 
-## 7. Open Questions
+## 7. Design Decisions（已決定）
 
-1. **Subagent branch 策略：** 每個 subagent 在同一個 branch commit，還是各自 sub-branch 再 merge？
-2. **最大平行度：** 同時跑幾個 subagent 最合適？（API rate limit、context cost）
-3. **失敗重試策略：** 自動重試幾次？什麼條件下放棄並通知用戶？
-4. **是否保留 ralph.sh：** 作為 headless/CI fallback，還是完全遷移？
+1. **Subagent branch 策略：** 所有 subagent 在**同一個 branch** 上 commit。不使用 sub-branch。Dispatcher 排程時須確保平行 stories 不修改重疊檔案。
+2. **最大平行度：** 預設 **3 個** subagent 同時執行，可透過設定調整。
+3. **失敗重試策略：** 單一 subagent session 內最多重試 **3 次**。3 次仍失敗則該 story 標記為失敗，交回主 session 重新 dispatch（可能拆分 story、調整策略後重試）。
+4. **是否保留 ralph.sh：** 保留作為參考，v2 開發期間不刪除。
