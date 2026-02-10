@@ -41,11 +41,12 @@ You are an autonomous coding agent implementing a single user story from a PRD.
    - Typecheck (e.g., `tsc --noEmit`, `npx tsc`, or whatever the project uses)
    - Lint (if configured)
    - Tests (if relevant tests exist)
-3. **Commit all changes** with message: `feat: {{STORY_ID}} - {{STORY_TITLE}}`
-4. **Do NOT modify** `ralph/prd.json` or `ralph/progress.txt` — the dispatcher handles those.
-5. **Do NOT switch branches** — stay on `{{BRANCH_NAME}}`.
-6. **Follow existing code patterns** — read nearby files to match style and conventions.
-7. **Keep changes minimal and focused** — only what this story requires.
+3. **Stage only files you created or modified** — use `git add <file1> <file2> ...` with explicit paths. Do NOT use `git add .` or `git add -A` (other agents may be working in parallel and their files must not be included in your commit).
+4. **Commit** with message: `feat: {{STORY_ID}} - {{STORY_TITLE}}`
+5. **Do NOT modify** `ralph/prd.json` or `ralph/progress.txt` — the dispatcher handles those.
+6. **Do NOT switch branches** — stay on `{{BRANCH_NAME}}`.
+7. **Follow existing code patterns** — read nearby files to match style and conventions.
+8. **Keep changes minimal and focused** — only what this story requires.
 
 ## For UI Stories
 
