@@ -8,7 +8,7 @@ An autonomous AI agent system for [Claude Code](https://claude.ai/code) that ite
 
 The original [Ralph](https://github.com/snarktank/ralph) was built for Amp. This project started as a Claude Code adaptation of that pattern — a simple bash loop (`ralph.sh`) that spawns fresh Claude instances sequentially.
 
-Now it's evolving into something more: leveraging Claude Code's native capabilities (Task system, Skills, Hooks) to build a smarter orchestration layer with **dependency-aware parallel execution** and **hard-enforced quality gates**.
+Now it's evolving into something more: leveraging Claude Code's native capabilities (Task system, Skills, Hooks) to build a smarter orchestration layer with **dependency-aware parallel execution** and **schema-validated data integrity**.
 
 ## Architecture
 
@@ -34,8 +34,7 @@ User invokes Ralph skill
        ├─ Parse prd.json dependency graph (dependsOn)
        ├─ TaskCreate for each story (with blockedBy relations)
        ├─ Parallel spawn independent stories via Task tool
-       ├─ Hooks enforce quality checks before commits
-       ├─ Hooks validate prd.json schema on write
+       ├─ Skill hooks validate prd.json schema on write
        ├─ On story completion → unlock downstream tasks
        └─ Repeat until all stories pass
 ```
@@ -46,7 +45,7 @@ Key improvements over v1:
 |---|---|---|
 | Orchestration | External bash loop | Main Claude session |
 | Execution | Strictly sequential | Parallel via dependency DAG |
-| Quality checks | Soft (prompt instructions) | Hard (Hooks block bad commits) |
+| Quality checks | Soft (prompt instructions) | Skill hooks validate prd.json writes |
 | Dependencies | Linear priority numbers | `dependsOn` DAG with topological ordering |
 | Error recovery | Blind retry next iteration | Orchestrator can intervene and re-dispatch |
 
@@ -153,10 +152,10 @@ Between iterations, knowledge persists through:
 
 ### Quality Gates
 
-v1 relies on prompt instructions for quality checks. v2 uses Hooks to enforce them:
-- **Pre-commit hook** — blocks `git commit` if typecheck/lint fails
+v1 relies on prompt instructions for quality checks. v2 uses skill-level Hooks to validate data integrity:
 - **prd.json validation hook** — blocks writes with invalid JSON or missing fields
 - **`dependsOn` integrity check** — ensures all referenced story IDs exist
+- **`ensure-ralph-dir` hook** — auto-creates `ralph/` directory before writes
 
 ## Debugging
 

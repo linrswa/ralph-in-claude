@@ -67,8 +67,7 @@ User 啟動 Ralph skill
        ├─ 平行 spawn 無依賴的 stories（Task tool with subagents）
        │    ├─ Task A: US-001 (schema)        ← 立即執行
        │    └─ Task B: US-005 (config)        ← 立即執行（與 A 獨立）
-       ├─ Hook: PreToolUse[Bash] → commit 前跑 quality checks
-       ├─ Hook: PostToolUse[Edit/Write] → prd.json 寫入驗證
+       ├─ Hook: PreToolUse[Write] → prd.json 寫入驗證
        ├─ Task A 完成 → TaskUpdate → 解鎖 US-002, US-003
        ├─ 平行 spawn US-002 和 US-003
        │    ├─ Task C: US-002 (backend API)   ← 平行
@@ -85,7 +84,7 @@ User 啟動 Ralph skill
 | 執行模式 | 嚴格串行 | 依賴圖允許平行 |
 | Agent 隔離 | 每次 fresh Claude instance | 每個 Task 是獨立 subagent |
 | 依賴管理 | priority 線性排序 | `dependsOn` + `blockedBy` DAG |
-| 驗證機制 | Prompt 裡的文字指示 | **Hooks 硬性攔截** |
+| 驗證機制 | Prompt 裡的文字指示 | **Skill Hooks 驗證 prd.json 寫入** |
 | 狀態追蹤 | prd.json `passes` 欄位 | TaskList + prd.json 雙軌 |
 | 知識傳遞 | progress.txt | progress.txt + CLAUDE.md（主 session 累積 context） |
 | 錯誤恢復 | 下一個 iteration 重試 | 主 session 可以即時介入、重新分配 |
@@ -202,53 +201,7 @@ Phase N: 重複直到全部完成
 
 ### 3.4 Hooks Design
 
-#### 3.4.1 Pre-Commit Validation（PreToolUse on Bash）
-
-攔截 `git commit` 命令，強制執行 quality checks：
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/pre-commit-validate.sh"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-```bash
-#!/bin/bash
-# .claude/hooks/pre-commit-validate.sh
-INPUT=$(cat)
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command')
-
-# 只攔截 git commit 命令
-if echo "$COMMAND" | grep -qE '^git commit'; then
-  # 跑 typecheck
-  if ! npm run typecheck 2>/dev/null && ! npx tsc --noEmit 2>/dev/null; then
-    echo "BLOCKED: Typecheck failed. Fix errors before committing." >&2
-    exit 2
-  fi
-  # 跑 lint
-  if ! npm run lint 2>/dev/null; then
-    echo "BLOCKED: Lint failed. Fix errors before committing." >&2
-    exit 2
-  fi
-fi
-exit 0
-```
-
-**效果：** Agent 無法繞過 quality checks，不管 prompt 怎麼寫。
-
-#### 3.4.2 prd.json Write Validation（PreToolUse on Edit/Write）
+#### 3.4.1 prd.json Write Validation（PreToolUse on Write）— 已實作
 
 攔截對 prd.json 的修改，驗證：
 
@@ -278,7 +231,7 @@ fi
 exit 0
 ```
 
-#### 3.4.3 Story Completion Verification（PostToolUse）
+#### 3.4.2 Story Completion Verification（PostToolUse）
 
 Story 完成時自動驗證，只有全部 acceptance criteria 通過才允許設 `passes: true`：
 
@@ -298,7 +251,7 @@ fi
 exit 0
 ```
 
-#### 3.4.4 TaskCompleted Hook
+#### 3.4.3 TaskCompleted Hook
 
 利用 Claude Code 的 `TaskCompleted` event，在 subagent 完成 story 後同步狀態：
 
@@ -383,10 +336,9 @@ exit 0
 
 ### 4.3 Hooks
 
-- [ ] `.claude/hooks/pre-commit-validate.sh` — commit 前跑 quality checks
-- [ ] `.claude/hooks/validate-prd-write.sh` — prd.json 寫入時驗證 JSON schema
+- [x] `.claude/hooks/validate-prd-write.sh` — prd.json 寫入時驗證 JSON schema（skill-level hook，已實作）
+- [x] `.claude/hooks/ensure-ralph-dir.sh` — 確保 ralph/ 目錄存在（skill-level hook，已實作）
 - [ ] `.claude/hooks/on-task-completed.sh` — story 完成後的同步和驗證
-- [ ] `.claude/settings.json` 或 `.claude/settings.local.json` 裡的 hooks 配置
 
 ### 4.4 Prompt Updates
 
@@ -451,9 +403,9 @@ exit 0
 2. 更新 SKILL.md converter
 3. ralph.sh 忽略 `dependsOn`（向下相容）
 
-### Phase 2: Hooks（中風險）
-1. 實作 pre-commit validation hook
-2. 實作 prd.json write validation hook
+### Phase 2: Hooks（已部分完成）
+1. ~~實作 prd.json write validation hook~~ ✓（skill-level hook）
+2. ~~實作 ensure-ralph-dir hook~~ ✓（skill-level hook）
 3. 在現有 ralph.sh 流程中測試 hooks
 
 ### Phase 3: Dispatcher（高價值）
