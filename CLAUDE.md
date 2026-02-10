@@ -87,6 +87,8 @@ Convert a PRD markdown file to Ralph's JSON format:
 | `progress.txt` | Append-only log of learnings |
 | `.claude/hooks/ensure-ralph-dir.sh` | Skill hook — auto-creates `ralph/` directory before writes |
 | `.claude/hooks/validate-prd-write.sh` | Skill hook — validates prd.json schema before writes |
+| `.claude/skills/ralph-run/SKILL.md` | v2 dispatcher — parallel story orchestration via Task tool |
+| `.claude/skills/ralph-run/subagent-prompt-template.md` | Worker prompt template with placeholders |
 
 ## PRD Schema Validation
 
@@ -113,10 +115,30 @@ Hooks 只在 Ralph skill 執行期間生效，不影響其他操作。
 
 ## Running Ralph
 
+### v2: `/ralph-run` (Recommended)
+
+Use the `/ralph-run` skill to orchestrate parallel story execution:
+
+```
+/ralph-run              # uses ralph/prd.json
+/ralph-run path/to/prd.json  # custom path
+```
+
+How it works:
+1. Reads prd.json and builds a dependency DAG from `dependsOn` fields
+2. Spawns up to 3 subagent workers in parallel per wave
+3. Workers implement stories, run quality checks, and commit
+4. Dispatcher verifies results, updates prd.json, and spawns next wave
+5. Repeats until all stories pass or all are blocked/failed
+
+### v1: `ralph.sh` (Fallback)
+
 ```bash
 ./ralph.sh [max_iterations]  # default: 10
 ```
 
-Ralph continues until:
+Sequential execution — one story per iteration. Useful for CI/headless environments.
+
+Both continue until:
 - All stories have `passes: true`, or
-- Max iterations reached
+- Max iterations/waves exhausted

@@ -26,17 +26,23 @@ ralph.sh
 
 Each iteration is a fresh Claude instance with no shared memory. State persists via `prd.json`, `progress.txt`, and git history.
 
-### v2: Native Claude Code Integration (in progress)
+### v2: Native Claude Code Integration (`/ralph-run`)
 
 ```
-User invokes Ralph skill
-  └─ Main Claude session (orchestrator)
-       ├─ Parse prd.json dependency graph (dependsOn)
-       ├─ TaskCreate for each story (with blockedBy relations)
-       ├─ Parallel spawn independent stories via Task tool
-       ├─ Skill hooks validate prd.json schema on write
-       ├─ On story completion → unlock downstream tasks
-       └─ Repeat until all stories pass
+User invokes /ralph-run
+  └─ Main Claude session (dispatcher)
+       ├─ Read ralph/prd.json, build dependency DAG
+       ├─ Wave 1: spawn up to 3 senior-engineer subagents (parallel)
+       │    ├─ US-001 (schema)
+       │    ├─ US-002 (config)
+       │    └─ US-005 (independent)
+       ├─ Verify: check git commits, run typecheck
+       ├─ Update prd.json passes, append progress.txt
+       ├─ Wave 2: spawn newly unblocked stories
+       │    ├─ US-003 (depended on US-001)
+       │    └─ US-004 (depended on US-002)
+       ├─ Verify, update, repeat
+       └─ All stories done → report completion
 ```
 
 Key improvements over v1:
@@ -66,9 +72,10 @@ Copy skills to your Claude Code config for use across all projects:
 ```bash
 cp -r .claude/skills/prd ~/.claude/skills/
 cp -r .claude/skills/ralph ~/.claude/skills/
+cp -r .claude/skills/ralph-run ~/.claude/skills/
 ```
 
-This enables `/prd` and `/ralph` commands in any project.
+This enables `/prd`, `/ralph`, and `/ralph-run` commands in any project.
 
 ### Workflow
 
@@ -88,32 +95,38 @@ Answer the clarifying questions. Output saves to `tasks/prd-[feature-name].md`.
 
 This creates `ralph/prd.json` with user stories structured for autonomous execution.
 
-**3. Run Ralph (v1)**
+**3. Run Ralph**
+
+**v2 (recommended) — parallel execution:**
+
+```
+/ralph-run
+```
+
+The dispatcher reads `ralph/prd.json`, builds a dependency DAG, and spawns up to 3 subagent workers per wave. Workers implement stories in parallel, commit, and report back. The dispatcher verifies results, updates prd.json, and spawns the next wave.
+
+**v1 (fallback) — sequential execution:**
 
 ```bash
 ./ralph.sh [max_iterations]  # default: 10
 ```
 
-Ralph will:
-1. Create a feature branch from `baseBranch`
-2. Pick the highest-priority story where `passes: false` and all `dependsOn` are satisfied
-3. Implement, run quality checks, commit
-4. Mark story as `passes: true`, append learnings to `progress.txt`
-5. Repeat until all stories pass or max iterations reached
+Spawns one fresh Claude instance per story, sequentially. Useful for CI/headless environments.
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
+| `.claude/skills/ralph-run/` | **v2 dispatcher** — parallel story orchestration (`/ralph-run`) |
+| `.claude/skills/ralph/` | Skill for converting PRDs to JSON (`/ralph`) |
+| `.claude/skills/prd/` | Skill for generating PRDs (`/prd`) |
+| `.claude/hooks/` | Validation hooks (prd.json schema, directory setup) |
 | `ralph.sh` | v1 bash loop — spawns fresh Claude instances |
-| `prompt.md` | Instructions given to each Claude instance |
+| `prompt.md` | v1 instructions given to each Claude instance |
 | `prd.json` | User stories with status tracking and dependency graph |
 | `prd.json.example` | Example format for reference |
 | `progress.txt` | Append-only learnings across iterations |
 | `plan.md` | v2 architecture design document |
-| `.claude/skills/prd/` | Skill for generating PRDs (`/prd`) |
-| `.claude/skills/ralph/` | Skill for converting PRDs to JSON (`/ralph`) |
-| `.claude/hooks/` | Validation hooks (prd.json schema, directory setup) |
 
 ## Core Concepts
 
@@ -152,7 +165,14 @@ Between iterations, knowledge persists through:
 
 ### Quality Gates
 
-v1 relies on prompt instructions for quality checks. v2 uses skill-level Hooks to validate data integrity:
+v2 enforces quality at two levels:
+
+**Dispatcher-level** (after each wave):
+- Verifies git commits exist for each completed story
+- Runs project typecheck to catch regressions
+- Retries failed stories up to 3 times with failure context
+
+**Hook-level** (on every prd.json write):
 - **prd.json validation hook** — blocks writes with invalid JSON or missing fields
 - **`dependsOn` integrity check** — ensures all referenced story IDs exist
 - **`ensure-ralph-dir` hook** — auto-creates `ralph/` directory before writes

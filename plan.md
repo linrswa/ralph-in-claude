@@ -324,34 +324,34 @@ exit 0
 
 建立新的 skill 或更新現有 ralph skill，實作 dispatcher 邏輯：
 
-- [ ] 讀取 prd.json 並建構依賴圖
-- [ ] 偵測循環依賴並報錯
-- [ ] 計算可平行的 story groups（拓撲排序）
-- [ ] 為每個 story 建立 TaskCreate
-- [ ] 設定正確的 blockedBy 關係
-- [ ] 產生每個 subagent 的 prompt（story context + codebase context）
-- [ ] 用 Task tool 平行 spawn 無依賴的 stories
-- [ ] 監聽 Task 完成，更新 prd.json，解鎖下游 tasks
-- [ ] 處理失敗情況（subagent 失敗時的重試或降級策略）
+- [x] 讀取 prd.json 並建構依賴圖
+- [x] 偵測循環依賴並報錯（Kahn's algorithm in SKILL.md §2）
+- [x] 計算可平行的 story groups（拓撲排序）
+- [x] 為每個 story 建立 TaskCreate（wave-based, not TaskCreate — uses Task tool directly）
+- [x] 設定正確的 blockedBy 關係（via dependsOn DAG in dispatcher logic）
+- [x] 產生每個 subagent 的 prompt（subagent-prompt-template.md with placeholders）
+- [x] 用 Task tool 平行 spawn 無依賴的 stories
+- [x] 監聽 Task 完成，更新 prd.json，解鎖下游 tasks
+- [x] 處理失敗情況（3 retries per story, failure context appended to retry prompt）
 
 ### 4.3 Hooks
 
 - [x] `.claude/hooks/validate-prd-write.sh` — prd.json 寫入時驗證 JSON schema（skill-level hook，已實作）
 - [x] `.claude/hooks/ensure-ralph-dir.sh` — 確保 ralph/ 目錄存在（skill-level hook，已實作）
-- [ ] `.claude/hooks/on-task-completed.sh` — story 完成後的同步和驗證
+- ~~`.claude/hooks/on-task-completed.sh`~~ — 不需要，dispatcher 在 wave 完成後直接驗證
 
 ### 4.4 Prompt Updates
 
-- [ ] 更新 prompt.md 適配 subagent 模式（不再是 standalone iteration）
-- [ ] Subagent 不需要自己讀 prd.json、判斷做哪個 story——由 dispatcher 指定
-- [ ] Subagent 不需要自己更新 prd.json——由主 session 統一更新
-- [ ] 保留 quality check 和 commit 邏輯
+- [x] ~~更新 prompt.md 適配 subagent 模式~~ — prompt.md 保留給 v1；v2 使用 `subagent-prompt-template.md`
+- [x] Subagent 不需要自己讀 prd.json、判斷做哪個 story——由 dispatcher 指定（template 直接注入 story）
+- [x] Subagent 不需要自己更新 prd.json——由主 session 統一更新（template 明確禁止）
+- [x] 保留 quality check 和 commit 邏輯（template 包含 quality check + commit 指令）
 
 ### 4.5 Backward Compatibility
 
-- [ ] `dependsOn` 不存在時，行為等同 v1（按 priority 串行）
-- [ ] ralph.sh 保留作為 fallback（適合 CI/headless 場景）
-- [ ] 現有 prd.json 不需修改即可在 v2 下運行
+- [x] `dependsOn` 不存在時，行為等同 v1（按 priority 串行）— Phase 1 已處理
+- [x] ralph.sh 保留作為 fallback（適合 CI/headless 場景）— 未修改
+- [x] 現有 prd.json 不需修改即可在 v2 下運行 — `dependsOn` 是 required 但 `[]` 即可
 
 ---
 
@@ -403,15 +403,15 @@ exit 0
 2. 更新 SKILL.md converter
 3. ralph.sh 忽略 `dependsOn`（向下相容）
 
-### Phase 2: Hooks（已部分完成）
+### Phase 2: Hooks ✓
 1. ~~實作 prd.json write validation hook~~ ✓（skill-level hook）
 2. ~~實作 ensure-ralph-dir hook~~ ✓（skill-level hook）
-3. 在現有 ralph.sh 流程中測試 hooks
+3. ~~在現有 ralph.sh 流程中測試 hooks~~ ✓
 
-### Phase 3: Dispatcher（高價值）
-1. 建立 dispatcher skill
-2. 實作 prd.json → TaskCreate 映射
-3. 實作平行 spawn 邏輯
+### Phase 3: Dispatcher（高價值） ✓
+1. ~~建立 dispatcher skill~~ ✓（`.claude/skills/ralph-run/SKILL.md`）
+2. ~~實作 prd.json → TaskCreate 映射~~ ✓（wave-based dispatch in SKILL.md）
+3. ~~實作平行 spawn 邏輯~~ ✓（Task tool parallel calls, max 3 per wave）
 4. 測試 end-to-end
 
 ### Phase 4: Polish
