@@ -7,10 +7,18 @@ hooks:
     - matcher: "Write"
       hooks:
         - type: command
-          command: "scripts/ensure-ralph-dir.sh"
+          command: "../../scripts/ensure-ralph-dir.sh"
           timeout: 5
         - type: command
-          command: "scripts/validate-prd-write.sh"
+          command: "../../scripts/validate-prd-write.sh"
+          timeout: 10
+    - matcher: "Edit"
+      hooks:
+        - type: command
+          command: "../../scripts/ensure-ralph-dir.sh"
+          timeout: 5
+        - type: command
+          command: "../../scripts/validate-prd-write.sh"
           timeout: 10
 ---
 

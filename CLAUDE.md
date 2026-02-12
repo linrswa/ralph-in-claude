@@ -84,9 +84,8 @@ Convert a PRD markdown file to Ralph's JSON format:
 | `.claude-plugin/plugin.json` | Plugin manifest |
 | `skills/prd/SKILL.md` | `ralph:prd` — PRD generator |
 | `skills/convert/SKILL.md` | `ralph:convert` — PRD-to-JSON converter |
-| `skills/convert/scripts/` | Hooks for convert skill (ensure-ralph-dir, validate-prd-write) |
+| `scripts/` | Shared hook scripts (ensure-ralph-dir, validate-prd-write) |
 | `skills/run/SKILL.md` | `ralph:run` — parallel story dispatcher |
-| `skills/run/scripts/` | Hooks for run skill |
 | `skills/run/references/subagent-prompt-template.md` | Worker prompt template with placeholders |
 | `ralph.sh` | v1 fallback loop script — spawns Claude iterations |
 | `prompt.md` | v1 instructions given to each Claude iteration |
@@ -95,12 +94,12 @@ Convert a PRD markdown file to Ralph's JSON format:
 
 ## PRD Schema Validation
 
-The `ralph:convert` and `ralph:run` skills define PreToolUse hooks in their SKILL.md frontmatter that fire before Write tool executions:
+The `ralph:convert` and `ralph:run` skills define PreToolUse hooks in their SKILL.md frontmatter that fire before `Write` and `Edit` tool executions on prd.json:
 
-1. **`ensure-ralph-dir.sh`** — ensures `.ralph-in-claude/` directory exists
-2. **`validate-prd-write.sh`** — validates prd.json schema (valid JSON, required fields, `dependsOn` referential integrity), blocks writes on failure
+1. **`scripts/ensure-ralph-dir.sh`** — ensures `.ralph-in-claude/` directory exists
+2. **`scripts/validate-prd-write.sh`** — validates prd.json schema (valid JSON, required fields, `dependsOn` referential integrity), blocks operations on failure (exit 2). For `Edit` operations, simulates the edit and validates the result before allowing.
 
-Hooks only fire during their respective skill's execution and don't affect other operations.
+Both scripts are shared at the plugin root `scripts/` directory and referenced from skill SKILL.md via `../../scripts/`. Hooks only fire during their respective skill's execution and don't affect other operations.
 
 ## Story Sizing
 

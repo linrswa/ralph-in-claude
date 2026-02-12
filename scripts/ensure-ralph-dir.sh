@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse hook on Write: ensures .ralph-in-claude/ directory exists before writing.
+# PreToolUse hook on Write/Edit: ensures .ralph-in-claude/ directory exists before writing.
 # Exit 0 = allow, Exit 2 = block.
 set -euo pipefail
 
