@@ -21,7 +21,7 @@
 - [x] **Write matcher 範圍不足** — ~~目前只攔截 `Write` tool，但 `Edit` tool 也能修改 prd.json。~~ 已修正：兩個 SKILL.md 新增 `matcher: "Edit"`，validate 腳本用 Python 模擬 edit 結果後驗證。（v0.1.1）
 - [ ] **validate-prd-write.sh hook 不檢查 dependency cycle** — hook 只驗證欄位完整性和 dependsOn 參照存在，不做 DAG cycle detection。Cycle 只在 `ralph:run` 執行時才被偵測。建議把 cycle check 前移到 hook 中，在寫入時就阻擋。
 - [x] **Hook 腳本重複** — ~~`convert/scripts/` 和 `run/scripts/` 中的腳本完全相同。~~ 已修正：整合至 plugin root `scripts/`，SKILL.md 以 `../../scripts/` 引用。（v0.1.1）
-- [ ] **`senior-engineer` subagent type 可移植性** — 非 Claude Code 內建類型，需在 `~/.claude/agents/senior-engineer.md` 定義。作為可分發 plugin，使用者可能沒有此定義，Claude 會 fallback 到 `general-purpose`。建議：(a) 在 plugin 中附帶 agent 定義，或 (b) 改用內建類型並在 prompt 中補充角色指令。
+- [x] **`senior-engineer` subagent type 可移植性** — ~~非 Claude Code 內建類型，需在 `~/.claude/agents/senior-engineer.md` 定義。~~ 已修正：建立 `agents/ralph-worker.md` 隨 plugin 分發，dispatcher 改用 `ralph:ralph-worker`。角色定義（coding standards、process）與操作規則（git 禁令、report 格式）內建於 agent definition，subagent prompt 精簡為純動態 story context。
 - [ ] **SKILL.md 聲稱 Tasks 是 ephemeral 不完全正確** — Tasks 實際上可持久化（存於 `~/.claude/tasks/<ID>/`），跨 session 可用。prd.json 作為 source of truth 的決策仍然正確，但文件敘述應修正以避免誤導。
 - [ ] **Retry 缺少前次 attempt 的具體上下文** — 目前只附上 subagent 的 failure report（可能模糊）。應加入：前次 `git diff`（如有 commit）、typecheck/lint 的具體錯誤訊息（前 50 行），讓重試 subagent 不用從零開始。
 

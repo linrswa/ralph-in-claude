@@ -179,7 +179,7 @@ For each story in wave:
     status: "in_progress"
   )
   Task(
-    subagent_type: "senior-engineer",
+    subagent_type: "ralph:ralph-worker",
     description: "<story.id> - <story.title>",
     prompt: <generated prompt from template>
   )
