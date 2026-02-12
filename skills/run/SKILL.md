@@ -56,9 +56,8 @@ Options:
 4. **Check git branch** — ensure you're on the branch specified by `branchName`. If not:
    - If the branch exists: `git checkout <branchName>`
    - If not: `git checkout -b <branchName>` from `baseBranch` (default: `main`)
-5. **Initialize internal tracking** — create two mappings:
+5. **Initialize internal tracking** — create a mapping:
    - `storyIdToTaskId` — maps story IDs (e.g., `"US-001"`) to TaskCreate-returned task IDs
-   - `retries` — maps story IDs to retry counts (starting at `0`)
 
 ---
 
@@ -127,10 +126,18 @@ Repeat until all stories have `passes: true` or all remaining stories are blocke
 
 ### 3.1 Find Ready Stories
 
-Call `TaskList` to get the current state of all tasks. A story is **ready** if ALL of these are true:
+**First, rebuild `storyIdToTaskId` from TaskList.** This is done every wave to survive context compaction:
+
+1. Call `TaskList` to get all tasks
+2. For each task, parse the `subject` field (format: `US-001: Title`) — extract the story ID prefix before `:` and map it to the task's ID
+3. This reconstructed mapping replaces any stale in-memory `storyIdToTaskId`
+
+**Then, determine retry counts** by reading prd.json and counting `"Attempt N failed:"` entries in each story's `notes` field. This is the retry count for that story.
+
+A story is **ready** if ALL of these are true:
 - Task `status` is `pending`
 - Task `blockedBy` is empty (all dependencies are completed)
-- `retries[story.id]` is less than 3
+- Retry count (from `notes`) is less than 3
 
 Cross-reference TaskList results with `storyIdToTaskId` to map back to story data in prd.json.
 
@@ -180,16 +187,16 @@ For each story in wave:
 
 **CRITICAL:** All TaskUpdate and Task calls for a wave MUST be in the same message to enable parallel execution.
 
-### 3.5 Verify Results
+### 3.5 Verify Results & Commit
 
-When all subagents in the wave return:
+When all subagents in the wave return, process each story **sequentially** (one at a time, to avoid git staging race conditions):
 
-For each completed story:
+For each story:
 
-1. **Check git log** — verify a commit exists with message matching `feat: <STORY_ID>`:
-   ```bash
-   git log --oneline -10 | grep "feat: <STORY_ID>"
-   ```
+1. **Parse subagent report** — extract:
+   - Status: PASS or FAIL
+   - Files changed: list of relative file paths
+   - Summary, decisions, learnings
 
 2. **Run typecheck** (if applicable) — check if the project has a typecheck command (look for `package.json` scripts, `tsconfig.json`, `Cargo.toml`, etc.):
    ```bash
@@ -198,9 +205,17 @@ For each completed story:
    ```
    If the project has no typecheck tooling, skip this step — it counts as passed.
 
-3. **Evaluate subagent report** — check if the subagent reported PASS or FAIL
+3. **Verify files** — confirm the reported files have changes in the working tree:
+   ```bash
+   git status --porcelain -- <file1> <file2> ...
+   ```
 
-**If verified (commit exists + typecheck passes or N/A + subagent reports PASS):**
+**If verified (subagent reports PASS + typecheck passes or N/A + files confirmed):**
+- **Dispatcher commits** — stage and commit the story's files sequentially:
+  ```bash
+  git add <file1> <file2> ...
+  git commit -m "feat: <STORY_ID> - <STORY_TITLE>"
+  ```
 - `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "completed")` — this auto-unblocks dependent tasks
 - Update `.ralph-in-claude/prd.json`: set the story's `passes` to `true`
 - Append to `.ralph-in-claude/progress.txt`:
@@ -213,10 +228,15 @@ For each completed story:
   ```
 
 **If failed:**
-- Increment `retries[story.id]`
+- **Discard changes** for this story's files to keep the working tree clean for retries:
+  ```bash
+  git checkout -- <modified-file1> <modified-file2> ...  # revert modified files
+  rm <new-file1> <new-file2> ...                         # remove newly created files
+  ```
+  Use the file list from the subagent report. If the subagent didn't report files, run `git diff --name-only` to identify uncommitted changes (use caution — other stories' changes may be present).
 - `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "pending")` — returns task to ready pool
-- Record failure reason in the story's `notes` field in prd.json (append, don't overwrite)
-- If retries >= 3: report to user, task stays pending but is filtered out in step 3.1
+- Append failure reason to the story's `notes` field in prd.json with the format `"Attempt N failed: <reason>"` (where N is the attempt number). This serves as the persistent retry counter — section 3.1 counts these entries to determine retry count.
+- If retry count >= 3: report to user, task stays pending but is filtered out in step 3.1
 
 ### 3.6 Loop
 
@@ -257,7 +277,7 @@ The previous attempt to implement this story failed:
 Please address this in your implementation.
 ```
 
-The retry count is tracked in `retries[story.id]`.
+The retry count is derived from `"Attempt N failed:"` entries in the story's `notes` field in prd.json (see section 3.5).
 
 ### Subagent Failure (retries >= 3)
 
@@ -303,6 +323,7 @@ Resolve the failed dependencies to continue.
 3. **prd.json writes are serialized** — only the dispatcher writes to prd.json, never subagents
 4. **progress.txt writes are serialized** — only the dispatcher appends to progress.txt
 5. **Task status updates are dispatcher-only** — subagents never call TaskCreate/TaskUpdate/TaskList. Only the dispatcher manages task lifecycle.
+6. **All git commits are dispatcher-only** — subagents do NOT run `git add` or `git commit`. The dispatcher stages and commits each story's files sequentially after verification (§3.5), eliminating git staging race conditions.
 
 ---
 
