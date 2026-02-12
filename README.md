@@ -32,7 +32,7 @@ Each iteration is a fresh Claude instance with no shared memory. State persists 
 User invokes /ralph:run
   └─ Main Claude session (dispatcher)
        ├─ Read ralph/prd.json, build dependency DAG
-       ├─ Wave 1: spawn up to 3 senior-engineer subagents (parallel)
+       ├─ Wave 1: spawn up to N senior-engineer subagents (parallel, default 3)
        │    ├─ US-001 (schema)
        │    ├─ US-002 (config)
        │    └─ US-005 (independent)
@@ -115,10 +115,12 @@ This creates `ralph/prd.json` with user stories structured for autonomous execut
 **v2 (recommended) — parallel execution:**
 
 ```
-/ralph:run
+/ralph:run                          # uses ralph/prd.json, default 3 agents
+/ralph:run path/to/prd.json        # custom prd path
+/ralph:run ralph/prd.json 5        # custom prd path + max 5 parallel agents
 ```
 
-The dispatcher reads `ralph/prd.json`, builds a dependency DAG, and spawns up to 3 subagent workers per wave. Workers implement stories in parallel, commit, and report back. The dispatcher verifies results, updates prd.json, and spawns the next wave.
+The dispatcher reads `ralph/prd.json`, builds a dependency DAG, and spawns subagent workers in parallel waves (default 3 per wave, configurable via the second argument). If max agents is set above 3, the dispatcher will prompt for confirmation about increased file race condition risk. Workers implement stories in parallel, commit, and report back. The dispatcher verifies results, updates prd.json, and spawns the next wave.
 
 **v1 (fallback) — sequential execution:**
 

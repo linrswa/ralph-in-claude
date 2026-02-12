@@ -1,6 +1,7 @@
 ---
 name: run
 description: "Run Ralph to implement all stories from prd.json. Orchestrates parallel subagent workers. Use when asked to 'run ralph', 'execute the prd', 'start ralph', 'implement all stories'."
+argument-hint: "[prd-path] [max-agents]"
 hooks:
   PreToolUse:
     - matcher: "Write"
@@ -19,9 +20,29 @@ You are the Ralph dispatcher. Your job is to orchestrate the implementation of a
 
 ---
 
+## 0. Parse Arguments
+
+`$ARGUMENTS` may contain up to two positional arguments: `[prd-path] [max-agents]`
+
+1. **First argument** (optional): path to prd.json. Default: `ralph/prd.json`
+2. **Second argument** (optional): max subagents per wave. Default: `3`
+
+If `max-agents` is greater than 3, **you MUST use the `AskUserQuestion` tool** before proceeding:
+
+```
+Question: "Running more than 3 parallel agents increases the risk of git file race conditions. Are you sure you want to continue with <N> max agents?"
+Options:
+  - "Yes, I understand the risk, continue"  →  proceed with the user-specified max
+  - "No, use the default (3 max agents)"    →  fall back to 3
+```
+
+**Do NOT skip this confirmation.** Store the final max-agents value for use in section 3.2.
+
+---
+
 ## 1. Initialization
 
-1. **Read prd.json** at `ralph/prd.json` (or the path passed as `$ARGUMENTS` if provided).
+1. **Read prd.json** at the path determined in step 0.
 2. **Read `ralph/progress.txt`** if it exists — extract the `## Codebase Patterns` section for passing to workers.
 3. **Read the source PRD** from the `sourcePrd` field for additional context.
 4. **Check git branch** — ensure you're on the branch specified by `branchName`. If not:
@@ -61,7 +82,7 @@ A story is **ready** if ALL of these are true:
 From ready stories:
 1. Sort by `priority` (lowest first)
 2. **Check for file overlap conflicts**: if story `notes` fields mention specific files, avoid running stories that touch the same files in parallel. Demote conflicting stories to the next wave.
-3. Take up to **3** stories for this wave
+3. Take up to **max-agents** stories for this wave (default 3, or the value confirmed in step 0)
 
 ### 3.3 Generate Worker Prompts
 
@@ -210,7 +231,7 @@ Resolve the failed dependencies to continue.
 
 ## 6. Concurrency Rules
 
-1. **Max 3 subagents per wave** — prevents resource exhaustion
+1. **Max subagents per wave** — defaults to 3 (configurable via `max-agents` argument). Values above 3 require user confirmation due to increased file race condition risk.
 2. **File overlap check** — before spawning a wave, scan story `notes` for file paths. If two stories mention the same file, run them sequentially (put one in the next wave).
 3. **prd.json writes are serialized** — only the dispatcher writes to prd.json, never subagents
 4. **progress.txt writes are serialized** — only the dispatcher appends to progress.txt
