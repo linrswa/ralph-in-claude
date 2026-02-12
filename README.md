@@ -2,6 +2,8 @@
 
 An autonomous AI agent system for [Claude Code](https://claude.ai/code) that iteratively implements features from a PRD. Inspired by [Geoffrey Huntley's Ralph pattern](https://ghuntley.com/ralph/).
 
+Packaged as a **Claude Code plugin** with three namespaced skills: `ralph:prd`, `ralph:convert`, `ralph:run`.
+
 ## Background
 
 The original [Ralph](https://github.com/snarktank/ralph) was built for Amp. This project started as a Claude Code adaptation of that pattern — a simple bash loop (`ralph.sh`) that spawns fresh Claude instances sequentially.
@@ -10,7 +12,7 @@ Now it's evolving into something more: leveraging Claude Code's native capabilit
 
 ## Architecture
 
-### v1: Sequential Bash Loop (current, stable)
+### v1: Sequential Bash Loop (fallback)
 
 ```
 ralph.sh
@@ -24,10 +26,10 @@ ralph.sh
 
 Each iteration is a fresh Claude instance with no shared memory. State persists via `prd.json`, `progress.txt`, and git history.
 
-### v2: Native Claude Code Integration (`/ralph-run`)
+### v2: Native Claude Code Integration (`/ralph:run`)
 
 ```
-User invokes /ralph-run
+User invokes /ralph:run
   └─ Main Claude session (dispatcher)
        ├─ Read ralph/prd.json, build dependency DAG
        ├─ Wave 1: spawn up to 3 senior-engineer subagents (parallel)
@@ -55,7 +57,7 @@ Key improvements over v1:
 
 See [plan.md](plan.md) for the full v2 design document.
 
-## Quick Start
+## Installation
 
 ### Prerequisites
 
@@ -63,24 +65,39 @@ See [plan.md](plan.md) for the full v2 design document.
 - `jq` installed (`brew install jq` / `apt install jq`)
 - A git repository for your project
 
-### Install Skills
+### Install as Plugin
 
-Copy skills to your Claude Code config for use across all projects:
+1. Register the local marketplace (if not already done):
 
 ```bash
-cp -r .claude/skills/prd ~/.claude/skills/
-cp -r .claude/skills/ralph ~/.claude/skills/
-cp -r .claude/skills/ralph-run ~/.claude/skills/
+# From Claude Code, run:
+/plugin marketplace add /path/to/your/marketplace
 ```
 
-This enables `/prd`, `/ralph`, and `/ralph-run` commands in any project.
+2. Install the ralph plugin:
 
-### Workflow
+```bash
+/plugin install ralph@local
+```
+
+3. Enable in `~/.claude/settings.json`:
+
+```json
+{
+  "enabledPlugins": {
+    "ralph@local": true
+  }
+}
+```
+
+This enables `/ralph:prd`, `/ralph:convert`, and `/ralph:run` commands in any project.
+
+## Workflow
 
 **1. Create a PRD**
 
 ```
-/prd [your feature description]
+/ralph:prd [your feature description]
 ```
 
 Answer the clarifying questions. Output saves to `tasks/prd-[feature-name].md`.
@@ -88,7 +105,7 @@ Answer the clarifying questions. Output saves to `tasks/prd-[feature-name].md`.
 **2. Convert to Ralph format**
 
 ```
-/ralph tasks/prd-[feature-name].md
+/ralph:convert tasks/prd-[feature-name].md
 ```
 
 This creates `ralph/prd.json` with user stories structured for autonomous execution.
@@ -98,7 +115,7 @@ This creates `ralph/prd.json` with user stories structured for autonomous execut
 **v2 (recommended) — parallel execution:**
 
 ```
-/ralph-run
+/ralph:run
 ```
 
 The dispatcher reads `ralph/prd.json`, builds a dependency DAG, and spawns up to 3 subagent workers per wave. Workers implement stories in parallel, commit, and report back. The dispatcher verifies results, updates prd.json, and spawns the next wave.
@@ -111,22 +128,47 @@ The dispatcher reads `ralph/prd.json`, builds a dependency DAG, and spawns up to
 
 Spawns one fresh Claude instance per story, sequentially. Useful for CI/headless environments.
 
+## Plugin Structure
+
+```
+ralph-in-claude/
+├── .claude-plugin/
+│   └── plugin.json                     # Plugin manifest
+├── skills/
+│   ├── prd/
+│   │   └── SKILL.md                    # ralph:prd — PRD generator
+│   ├── convert/
+│   │   ├── SKILL.md                    # ralph:convert — PRD-to-JSON converter
+│   │   └── scripts/
+│   │       ├── ensure-ralph-dir.sh     # Hook: auto-creates ralph/ dir
+│   │       └── validate-prd-write.sh   # Hook: validates prd.json schema
+│   └── run/
+│       ├── SKILL.md                    # ralph:run — parallel dispatcher
+│       ├── scripts/
+│       │   ├── ensure-ralph-dir.sh     # Hook: auto-creates ralph/ dir
+│       │   └── validate-prd-write.sh   # Hook: validates prd.json schema
+│       └── references/
+│           └── subagent-prompt-template.md  # Worker prompt template
+├── ralph.sh                            # v1 fallback loop
+├── prompt.md                           # v1 worker prompt
+└── plan.md                             # v2 design document
+```
+
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `.claude/skills/ralph-run/` | **v2 dispatcher** — parallel story orchestration (`/ralph-run`) |
-| `.claude/skills/ralph/` | Skill for converting PRDs to JSON (`/ralph`) |
-| `.claude/skills/prd/` | Skill for generating PRDs (`/prd`) |
-| `.claude/hooks/` | Validation hooks (prd.json schema, directory setup) |
+| `.claude-plugin/plugin.json` | Plugin manifest |
+| `skills/prd/SKILL.md` | `ralph:prd` — PRD generator |
+| `skills/convert/SKILL.md` | `ralph:convert` — PRD-to-JSON converter |
+| `skills/run/SKILL.md` | `ralph:run` — parallel story dispatcher |
+| `skills/run/references/subagent-prompt-template.md` | Worker prompt template |
 | `ralph.sh` | v1 bash loop — spawns fresh Claude instances |
 | `prompt.md` | v1 instructions given to each Claude instance |
 | `ralph/prd.json` | v2 user stories with status tracking and dependency graph |
 | `prd.json` | v1 user stories (root-level, used by `ralph.sh`) |
-| `prd.json.example` | Example format for reference |
 | `ralph/progress.txt` | v2 append-only learnings across iterations |
 | `progress.txt` | v1 append-only learnings (root-level) |
-| `plan.md` | v2 architecture design document |
 
 ## Core Concepts
 

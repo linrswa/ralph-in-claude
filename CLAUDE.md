@@ -81,23 +81,26 @@ Convert a PRD markdown file to Ralph's JSON format:
 
 | File | Purpose |
 |------|---------|
-| `ralph.sh` | Main loop script - spawns Claude iterations |
-| `prompt.md` | Instructions given to each Claude iteration |
+| `.claude-plugin/plugin.json` | Plugin manifest |
+| `skills/prd/SKILL.md` | `ralph:prd` — PRD generator |
+| `skills/convert/SKILL.md` | `ralph:convert` — PRD-to-JSON converter |
+| `skills/convert/scripts/` | Hooks for convert skill (ensure-ralph-dir, validate-prd-write) |
+| `skills/run/SKILL.md` | `ralph:run` — parallel story dispatcher |
+| `skills/run/scripts/` | Hooks for run skill |
+| `skills/run/references/subagent-prompt-template.md` | Worker prompt template with placeholders |
+| `ralph.sh` | v1 fallback loop script — spawns Claude iterations |
+| `prompt.md` | v1 instructions given to each Claude iteration |
 | `prd.json` | Current PRD with story status tracking |
 | `progress.txt` | Append-only log of learnings |
-| `.claude/hooks/ensure-ralph-dir.sh` | Skill hook — auto-creates `ralph/` directory before writes |
-| `.claude/hooks/validate-prd-write.sh` | Skill hook — validates prd.json schema before writes |
-| `.claude/skills/ralph-run/SKILL.md` | v2 dispatcher — parallel story orchestration via Task tool |
-| `.claude/skills/ralph-run/subagent-prompt-template.md` | Worker prompt template with placeholders |
 
 ## PRD Schema Validation
 
-Ralph skill 定義了 PreToolUse hooks（見 `.claude/skills/ralph/SKILL.md` frontmatter），在 Write tool 執行前自動觸發：
+The `ralph:convert` and `ralph:run` skills define PreToolUse hooks in their SKILL.md frontmatter that fire before Write tool executions:
 
-1. **`ensure-ralph-dir.sh`** — 確保 `ralph/` 目錄存在
-2. **`validate-prd-write.sh`** — 驗證 prd.json schema（合法 JSON、必要欄位、`dependsOn` 引用完整性），失敗則阻擋寫入
+1. **`ensure-ralph-dir.sh`** — ensures `ralph/` directory exists
+2. **`validate-prd-write.sh`** — validates prd.json schema (valid JSON, required fields, `dependsOn` referential integrity), blocks writes on failure
 
-Hooks 只在 Ralph skill 執行期間生效，不影響其他操作。
+Hooks only fire during their respective skill's execution and don't affect other operations.
 
 ## Story Sizing
 
@@ -115,13 +118,13 @@ Hooks 只在 Ralph skill 執行期間生效，不影響其他操作。
 
 ## Running Ralph
 
-### v2: `/ralph-run` (Recommended)
+### v2: `/ralph:run` (Recommended)
 
-Use the `/ralph-run` skill to orchestrate parallel story execution:
+Use the `/ralph:run` skill to orchestrate parallel story execution:
 
 ```
-/ralph-run              # uses ralph/prd.json
-/ralph-run path/to/prd.json  # custom path
+/ralph:run              # uses ralph/prd.json
+/ralph:run path/to/prd.json  # custom path
 ```
 
 How it works:

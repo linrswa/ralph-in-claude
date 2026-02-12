@@ -1,15 +1,15 @@
 ---
-name: ralph-run
+name: run
 description: "Run Ralph to implement all stories from prd.json. Orchestrates parallel subagent workers. Use when asked to 'run ralph', 'execute the prd', 'start ralph', 'implement all stories'."
 hooks:
   PreToolUse:
     - matcher: "Write"
       hooks:
         - type: command
-          command: ".claude/hooks/ensure-ralph-dir.sh"
+          command: "scripts/ensure-ralph-dir.sh"
           timeout: 5
         - type: command
-          command: ".claude/hooks/validate-prd-write.sh"
+          command: "scripts/validate-prd-write.sh"
           timeout: 10
 ---
 
@@ -67,7 +67,7 @@ From ready stories:
 
 For each story in the wave:
 
-1. Read the template at `.claude/skills/ralph-run/subagent-prompt-template.md`
+1. Read the template at `references/subagent-prompt-template.md`
 2. Substitute placeholders:
    - `{{STORY_ID}}` → story `id`
    - `{{STORY_TITLE}}` → story `title`
