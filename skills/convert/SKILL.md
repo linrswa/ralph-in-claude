@@ -31,7 +31,7 @@ Converts existing PRDs to the prd.json format that Ralph uses for autonomous exe
    - Other common branches if relevant
 3. **Extract implementation details** from the PRD (architecture decisions, APIs, data structures, code patterns) and include them in relevant story `notes` fields
 4. **Record the source PRD path** in `sourcePrd` field so Ralph can reference it during implementation
-5. Write the output to `ralph/prd.json` (the hook auto-creates the `ralph/` directory)
+5. Write the output to `.ralph-in-claude/prd.json` (the hook auto-creates the `.ralph-in-claude/` directory)
 
 **IMPORTANT:** Always use the `AskUserQuestion` tool when asking for user input. This provides an interactive UI with selectable options.
 

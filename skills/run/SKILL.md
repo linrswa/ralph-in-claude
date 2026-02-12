@@ -24,7 +24,7 @@ You are the Ralph dispatcher. Your job is to orchestrate the implementation of a
 
 `$ARGUMENTS` may contain up to two positional arguments: `[prd-path] [max-agents]`
 
-1. **First argument** (optional): path to prd.json. Default: `ralph/prd.json`
+1. **First argument** (optional): path to prd.json. Default: `.ralph-in-claude/prd.json`
 2. **Second argument** (optional): max subagents per wave. Default: `3`
 
 If `max-agents` is greater than 3, **you MUST use the `AskUserQuestion` tool** before proceeding:
@@ -43,7 +43,7 @@ Options:
 ## 1. Initialization
 
 1. **Read prd.json** at the path determined in step 0.
-2. **Read `ralph/progress.txt`** if it exists — extract the `## Codebase Patterns` section for passing to workers.
+2. **Read `.ralph-in-claude/progress.txt`** if it exists — extract the `## Codebase Patterns` section for passing to workers.
 3. **Read the source PRD** from the `sourcePrd` field for additional context.
 4. **Check git branch** — ensure you're on the branch specified by `branchName`. If not:
    - If the branch exists: `git checkout <branchName>`
@@ -137,8 +137,8 @@ For each completed story:
 3. **Evaluate subagent report** — check if the subagent reported PASS or FAIL
 
 **If verified (commit exists + typecheck passes or N/A + subagent reports PASS):**
-- Update `ralph/prd.json`: set the story's `passes` to `true`
-- Append to `ralph/progress.txt`:
+- Update `.ralph-in-claude/prd.json`: set the story's `passes` to `true`
+- Append to `.ralph-in-claude/progress.txt`:
   ```
   ## <TIMESTAMP> - <STORY_ID>: <STORY_TITLE>
   - <summary from subagent report>
@@ -156,7 +156,7 @@ For each completed story:
 ### 3.6 Loop
 
 After processing all results from a wave:
-1. Re-read `ralph/prd.json` (it may have been updated)
+1. Re-read `.ralph-in-claude/prd.json` (it may have been updated)
 2. Recompute the ready set (newly unblocked stories from completed dependencies)
 3. If ready stories exist → go to 3.1
 4. If no ready stories but incomplete stories remain → report blocked stories and stop

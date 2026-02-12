@@ -97,7 +97,7 @@ Convert a PRD markdown file to Ralph's JSON format:
 
 The `ralph:convert` and `ralph:run` skills define PreToolUse hooks in their SKILL.md frontmatter that fire before Write tool executions:
 
-1. **`ensure-ralph-dir.sh`** — ensures `ralph/` directory exists
+1. **`ensure-ralph-dir.sh`** — ensures `.ralph-in-claude/` directory exists
 2. **`validate-prd-write.sh`** — validates prd.json schema (valid JSON, required fields, `dependsOn` referential integrity), blocks writes on failure
 
 Hooks only fire during their respective skill's execution and don't affect other operations.
@@ -123,7 +123,7 @@ Hooks only fire during their respective skill's execution and don't affect other
 Use the `/ralph:run` skill to orchestrate parallel story execution:
 
 ```
-/ralph:run              # uses ralph/prd.json
+/ralph:run              # uses .ralph-in-claude/prd.json
 /ralph:run path/to/prd.json  # custom path
 ```
 

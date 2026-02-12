@@ -337,7 +337,7 @@ exit 0
 ### 4.3 Hooks
 
 - [x] `.claude/hooks/validate-prd-write.sh` — prd.json 寫入時驗證 JSON schema（skill-level hook，已實作）
-- [x] `.claude/hooks/ensure-ralph-dir.sh` — 確保 ralph/ 目錄存在（skill-level hook，已實作）
+- [x] `.claude/hooks/ensure-ralph-dir.sh` — 確保 .ralph-in-claude/ 目錄存在（skill-level hook，已實作）
 - ~~`.claude/hooks/on-task-completed.sh`~~ — 不需要，dispatcher 在 wave 完成後直接驗證
 
 ### 4.4 Prompt Updates

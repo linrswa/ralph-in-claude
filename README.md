@@ -31,7 +31,7 @@ Each iteration is a fresh Claude instance with no shared memory. State persists 
 ```
 User invokes /ralph:run
   └─ Main Claude session (dispatcher)
-       ├─ Read ralph/prd.json, build dependency DAG
+       ├─ Read .ralph-in-claude/prd.json, build dependency DAG
        ├─ Wave 1: spawn up to N senior-engineer subagents (parallel, default 3)
        │    ├─ US-001 (schema)
        │    ├─ US-002 (config)
@@ -108,19 +108,19 @@ Answer the clarifying questions. Output saves to `tasks/prd-[feature-name].md`.
 /ralph:convert tasks/prd-[feature-name].md
 ```
 
-This creates `ralph/prd.json` with user stories structured for autonomous execution.
+This creates `.ralph-in-claude/prd.json` with user stories structured for autonomous execution.
 
 **3. Run Ralph**
 
 **v2 (recommended) — parallel execution:**
 
 ```
-/ralph:run                          # uses ralph/prd.json, default 3 agents
+/ralph:run                          # uses .ralph-in-claude/prd.json, default 3 agents
 /ralph:run path/to/prd.json        # custom prd path
-/ralph:run ralph/prd.json 5        # custom prd path + max 5 parallel agents
+/ralph:run .ralph-in-claude/prd.json 5  # custom prd path + max 5 parallel agents
 ```
 
-The dispatcher reads `ralph/prd.json`, builds a dependency DAG, and spawns subagent workers in parallel waves (default 3 per wave, configurable via the second argument). If max agents is set above 3, the dispatcher will prompt for confirmation about increased file race condition risk. Workers implement stories in parallel, commit, and report back. The dispatcher verifies results, updates prd.json, and spawns the next wave.
+The dispatcher reads `.ralph-in-claude/prd.json`, builds a dependency DAG, and spawns subagent workers in parallel waves (default 3 per wave, configurable via the second argument). If max agents is set above 3, the dispatcher will prompt for confirmation about increased file race condition risk. Workers implement stories in parallel, commit, and report back. The dispatcher verifies results, updates prd.json, and spawns the next wave.
 
 **v1 (fallback) — sequential execution:**
 
@@ -142,12 +142,12 @@ ralph-in-claude/
 │   ├── convert/
 │   │   ├── SKILL.md                    # ralph:convert — PRD-to-JSON converter
 │   │   └── scripts/
-│   │       ├── ensure-ralph-dir.sh     # Hook: auto-creates ralph/ dir
+│   │       ├── ensure-ralph-dir.sh     # Hook: auto-creates .ralph-in-claude/ dir
 │   │       └── validate-prd-write.sh   # Hook: validates prd.json schema
 │   └── run/
 │       ├── SKILL.md                    # ralph:run — parallel dispatcher
 │       ├── scripts/
-│       │   ├── ensure-ralph-dir.sh     # Hook: auto-creates ralph/ dir
+│       │   ├── ensure-ralph-dir.sh     # Hook: auto-creates .ralph-in-claude/ dir
 │       │   └── validate-prd-write.sh   # Hook: validates prd.json schema
 │       └── references/
 │           └── subagent-prompt-template.md  # Worker prompt template
@@ -170,9 +170,9 @@ ralph-in-claude/
 | `ralph.sh` | v1 bash loop — spawns fresh Claude instances |
 | `prompt.md` | v1 instructions given to each Claude instance |
 | `prd.json.example` | Example prd.json for reference |
-| `ralph/prd.json` | v2 user stories with status tracking and dependency graph |
+| `.ralph-in-claude/prd.json` | v2 user stories with status tracking and dependency graph |
 | `prd.json` | v1 user stories (root-level, used by `ralph.sh`) |
-| `ralph/progress.txt` | v2 append-only learnings across iterations |
+| `.ralph-in-claude/progress.txt` | v2 append-only learnings across iterations |
 | `progress.txt` | v1 append-only learnings (root-level) |
 
 ## Core Concepts
@@ -206,7 +206,7 @@ Stories declare dependencies via `dependsOn`:
 ### Knowledge Transfer
 
 Between iterations, knowledge persists through:
-- **`ralph/progress.txt`** (v2) / **`progress.txt`** (v1) — append-only learnings and codebase patterns
+- **`.ralph-in-claude/progress.txt`** (v2) / **`progress.txt`** (v1) — append-only learnings and codebase patterns
 - **`CLAUDE.md`** — reusable patterns that Claude Code auto-reads
 - **Git history** — committed code from previous iterations
 
@@ -222,16 +222,16 @@ v2 enforces quality at two levels:
 **Hook-level** (on every prd.json write):
 - **prd.json validation hook** — blocks writes with invalid JSON or missing fields
 - **`dependsOn` integrity check** — ensures all referenced story IDs exist
-- **`ensure-ralph-dir` hook** — auto-creates `ralph/` directory before writes
+- **`ensure-ralph-dir` hook** — auto-creates `.ralph-in-claude/` directory before writes
 
 ## Debugging
 
 ```bash
 # See story status (v2 path; use prd.json for v1)
-jq '.userStories[] | {id, title, passes, dependsOn}' ralph/prd.json
+jq '.userStories[] | {id, title, passes, dependsOn}' .ralph-in-claude/prd.json
 
 # See learnings
-cat ralph/progress.txt
+cat .ralph-in-claude/progress.txt
 
 # Check git history
 git log --oneline -10
