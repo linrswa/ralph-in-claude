@@ -1,7 +1,5 @@
 # Ralph for Claude Code
 
-![Ralph](ralph.webp)
-
 An autonomous AI agent system for [Claude Code](https://claude.ai/code) that iteratively implements features from a PRD. Inspired by [Geoffrey Huntley's Ralph pattern](https://ghuntley.com/ralph/).
 
 ## Background
@@ -123,9 +121,11 @@ Spawns one fresh Claude instance per story, sequentially. Useful for CI/headless
 | `.claude/hooks/` | Validation hooks (prd.json schema, directory setup) |
 | `ralph.sh` | v1 bash loop — spawns fresh Claude instances |
 | `prompt.md` | v1 instructions given to each Claude instance |
-| `prd.json` | User stories with status tracking and dependency graph |
+| `ralph/prd.json` | v2 user stories with status tracking and dependency graph |
+| `prd.json` | v1 user stories (root-level, used by `ralph.sh`) |
 | `prd.json.example` | Example format for reference |
-| `progress.txt` | Append-only learnings across iterations |
+| `ralph/progress.txt` | v2 append-only learnings across iterations |
+| `progress.txt` | v1 append-only learnings (root-level) |
 | `plan.md` | v2 architecture design document |
 
 ## Core Concepts
@@ -159,7 +159,7 @@ Stories declare dependencies via `dependsOn`:
 ### Knowledge Transfer
 
 Between iterations, knowledge persists through:
-- **`progress.txt`** — append-only learnings and codebase patterns
+- **`ralph/progress.txt`** (v2) / **`progress.txt`** (v1) — append-only learnings and codebase patterns
 - **`CLAUDE.md`** — reusable patterns that Claude Code auto-reads
 - **Git history** — committed code from previous iterations
 
@@ -180,11 +180,11 @@ v2 enforces quality at two levels:
 ## Debugging
 
 ```bash
-# See story status
-jq '.userStories[] | {id, title, passes, dependsOn}' prd.json
+# See story status (v2 path; use prd.json for v1)
+jq '.userStories[] | {id, title, passes, dependsOn}' ralph/prd.json
 
 # See learnings
-cat progress.txt
+cat ralph/progress.txt
 
 # Check git history
 git log --oneline -10
