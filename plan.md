@@ -315,10 +315,10 @@ exit 0
 
 ### 4.1 prd.json Schema Changes
 
-- [ ] 新增 `dependsOn` 欄位（string array of story IDs）
-- [ ] `dependsOn` 為 optional，不存在時 fallback 到 v1 的 priority 排序
-- [ ] 更新 prd.json.example
-- [ ] 更新 ralph SKILL.md 的 converter 邏輯（PRD → prd.json 時分析依賴產生 dependsOn）
+- [x] 新增 `dependsOn` 欄位（string array of story IDs）
+- [x] `dependsOn` 為 required（`[]` 表示無依賴），validation hook 強制驗證
+- [x] 更新 prd.json.example
+- [x] 更新 ralph SKILL.md 的 converter 邏輯（PRD → prd.json 時分析依賴產生 dependsOn）
 
 ### 4.2 Dispatcher Skill
 
@@ -398,26 +398,26 @@ exit 0
 
 ## 6. Migration Path
 
-### Phase 1: Schema（低風險）
-1. prd.json 加 `dependsOn` 欄位
-2. 更新 SKILL.md converter
-3. ralph.sh 忽略 `dependsOn`（向下相容）
+### Phase 1: Schema ✓
+1. ~~prd.json 加 `dependsOn` 欄位~~ ✓（required，`[]` for root stories）
+2. ~~更新 SKILL.md converter~~ ✓（conversion rules、checklist 皆涵蓋）
+3. ~~ralph.sh 忽略 `dependsOn`~~ ✓（向下相容，未修改 ralph.sh）
 
 ### Phase 2: Hooks ✓
 1. ~~實作 prd.json write validation hook~~ ✓（skill-level hook）
 2. ~~實作 ensure-ralph-dir hook~~ ✓（skill-level hook）
 3. ~~在現有 ralph.sh 流程中測試 hooks~~ ✓
 
-### Phase 3: Dispatcher（高價值） ✓
+### Phase 3: Dispatcher ✓
 1. ~~建立 dispatcher skill~~ ✓（`.claude/skills/ralph-run/SKILL.md`）
 2. ~~實作 prd.json → TaskCreate 映射~~ ✓（wave-based dispatch in SKILL.md）
 3. ~~實作平行 spawn 邏輯~~ ✓（Task tool parallel calls, max 3 per wave）
-4. 測試 end-to-end
+4. ~~測試 end-to-end~~ ✓（手動驗證通過）
 
-### Phase 4: Polish
-1. 錯誤恢復和重試邏輯
-2. Progress reporting 整合
-3. 文件更新
+### Phase 4: Polish ✓
+1. ~~錯誤恢復和重試邏輯~~ ✓（SKILL.md §5 — 3 retries/story, failure context propagation）
+2. ~~Progress reporting 整合~~ ✓（SKILL.md §3.5 — wave 完成後更新 progress.txt + 報告用戶）
+3. ~~文件更新~~ ✓（README.md + CLAUDE.md 已更新）
 
 ---
 

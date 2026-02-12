@@ -106,15 +106,16 @@ For each completed story:
    git log --oneline -10 | grep "feat: <STORY_ID>"
    ```
 
-2. **Run typecheck** — if the project has a typecheck command (check package.json scripts, tsconfig.json, Cargo.toml, etc.):
+2. **Run typecheck** (if applicable) — check if the project has a typecheck command (look for `package.json` scripts, `tsconfig.json`, `Cargo.toml`, etc.):
    ```bash
    # Detect and run the appropriate typecheck
    npm run typecheck  # or tsc --noEmit, cargo check, etc.
    ```
+   If the project has no typecheck tooling, skip this step — it counts as passed.
 
 3. **Evaluate subagent report** — check if the subagent reported PASS or FAIL
 
-**If verified (commit exists + typecheck passes + subagent reports PASS):**
+**If verified (commit exists + typecheck passes or N/A + subagent reports PASS):**
 - Update `ralph/prd.json`: set the story's `passes` to `true`
 - Append to `ralph/progress.txt`:
   ```
