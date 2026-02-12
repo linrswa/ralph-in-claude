@@ -16,7 +16,7 @@ hooks:
 
 # Ralph Dispatcher — Parallel Story Execution
 
-You are the Ralph dispatcher. Your job is to orchestrate the implementation of all user stories from a prd.json file by spawning subagent workers in parallel waves.
+You are the Ralph dispatcher. Your job is to orchestrate the implementation of all user stories from a prd.json file by spawning subagent workers in parallel waves. You use the **TaskCreate/TaskUpdate/TaskList** tools to track story progress with visible, dependency-aware task management.
 
 ---
 
@@ -48,21 +48,68 @@ Options:
 4. **Check git branch** — ensure you're on the branch specified by `branchName`. If not:
    - If the branch exists: `git checkout <branchName>`
    - If not: `git checkout -b <branchName>` from `baseBranch` (default: `main`)
+5. **Initialize internal tracking** — create two mappings:
+   - `storyIdToTaskId` — maps story IDs (e.g., `"US-001"`) to TaskCreate-returned task IDs
+   - `retries` — maps story IDs to retry counts (starting at `0`)
 
 ---
 
-## 2. Build Dependency DAG
+## 2. Create Task Graph
 
-Parse the `userStories` array and build a dependency graph:
+Parse the `userStories` array and create a dependency-aware task graph using the task management tools.
 
-1. **Identify completed stories** — those with `passes: true`
-2. **Identify remaining stories** — those with `passes: false`
-3. **Detect cycles** using Kahn's algorithm:
-   - Compute in-degree for each remaining story based on `dependsOn` (only counting remaining stories)
-   - Start with stories that have in-degree 0
-   - Process: remove a story, decrement in-degrees of stories that depend on it
-   - If all remaining stories are processed, no cycle exists
-   - If stories remain unprocessed, there's a cycle — **report the cycle to the user and stop**
+### 2.1 Detect Cycles
+
+Before creating any tasks, check for dependency cycles among remaining stories (those with `passes: false`):
+
+1. Compute in-degree for each remaining story based on `dependsOn` (only counting remaining stories)
+2. Start with stories that have in-degree 0
+3. Process: remove a story, decrement in-degrees of stories that depend on it
+4. If all remaining stories are processed → no cycle, continue
+5. If stories remain unprocessed → **report the cycle to the user and stop**
+
+This is critical because the task system silently deadlocks on cycles — no error is reported.
+
+### 2.2 Create Tasks
+
+Create a task for **every** story (both completed and remaining) in a **single message** with parallel `TaskCreate` calls:
+
+```
+For each story in userStories:
+  TaskCreate(
+    subject: "<story.id>: <story.title>",
+    description: "Story: <story.description>\n\nAcceptance Criteria:\n<formatted criteria list>",
+    activeForm: "Implementing <story.id>"
+  )
+```
+
+After all TaskCreate calls return, record each returned `taskId` in the `storyIdToTaskId` mapping.
+
+### 2.3 Wire Dependencies
+
+For stories with non-empty `dependsOn`, issue `TaskUpdate` calls to wire `addBlockedBy` — all in a **single message** (parallel):
+
+```
+For each story where dependsOn is non-empty:
+  TaskUpdate(
+    taskId: storyIdToTaskId[story.id],
+    addBlockedBy: story.dependsOn.map(depId => storyIdToTaskId[depId])
+  )
+```
+
+### 2.4 Mark Already-Completed
+
+After dependencies are wired (step 2.3 must complete first), mark stories that already have `passes: true` — all in a **single message** (parallel):
+
+```
+For each story where passes is true:
+  TaskUpdate(
+    taskId: storyIdToTaskId[story.id],
+    status: "completed"
+  )
+```
+
+This order matters: wiring dependencies before marking completions ensures `blockedBy` references exist before auto-unblock fires on dependents.
 
 ---
 
@@ -72,10 +119,12 @@ Repeat until all stories have `passes: true` or all remaining stories are blocke
 
 ### 3.1 Find Ready Stories
 
-A story is **ready** if ALL of these are true:
-- `passes` is `false`
-- All IDs in its `dependsOn` have `passes: true` in prd.json
-- It has not failed 3 times already (track retries internally)
+Call `TaskList` to get the current state of all tasks. A story is **ready** if ALL of these are true:
+- Task `status` is `pending`
+- Task `blockedBy` is empty (all dependencies are completed)
+- `retries[story.id]` is less than 3
+
+Cross-reference TaskList results with `storyIdToTaskId` to map back to story data in prd.json.
 
 ### 3.2 Select Wave
 
@@ -101,20 +150,27 @@ For each story in the wave:
    - `{{CODEBASE_PATTERNS}}` → extracted from progress.txt, or "None yet"
    - `{{COMPLETED_STORIES}}` → list of completed story IDs and titles, or "None yet"
 
-### 3.4 Spawn Subagents
+### 3.4 Mark In-Progress + Spawn Subagents
 
-Spawn all wave stories **in a single message** using multiple Task tool calls (this runs them in parallel):
+In a **single message**, issue both the status updates and spawn calls in parallel:
+
+1. `TaskUpdate(taskId, status: "in_progress")` for each selected story
+2. `Task(subagent_type: "senior-engineer", ...)` for each selected story
 
 ```
 For each story in wave:
+  TaskUpdate(
+    taskId: storyIdToTaskId[story.id],
+    status: "in_progress"
+  )
   Task(
     subagent_type: "senior-engineer",
-    description: "[story.id] - [story.title]",
+    description: "<story.id> - <story.title>",
     prompt: <generated prompt from template>
   )
 ```
 
-**CRITICAL:** All Task calls for a wave MUST be in the same message to enable parallel execution.
+**CRITICAL:** All TaskUpdate and Task calls for a wave MUST be in the same message to enable parallel execution.
 
 ### 3.5 Verify Results
 
@@ -137,6 +193,7 @@ For each completed story:
 3. **Evaluate subagent report** — check if the subagent reported PASS or FAIL
 
 **If verified (commit exists + typecheck passes or N/A + subagent reports PASS):**
+- `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "completed")` — this auto-unblocks dependent tasks
 - Update `.ralph-in-claude/prd.json`: set the story's `passes` to `true`
 - Append to `.ralph-in-claude/progress.txt`:
   ```
@@ -148,17 +205,17 @@ For each completed story:
   ```
 
 **If failed:**
-- Increment internal retry counter for this story
-- Record failure reason in the story's `notes` field (append, don't overwrite)
-- If retries < 3: story returns to the ready pool with failure context added to its next prompt
-- If retries >= 3: mark story as permanently failed, report to user
+- Increment `retries[story.id]`
+- `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "pending")` — returns task to ready pool
+- Record failure reason in the story's `notes` field in prd.json (append, don't overwrite)
+- If retries >= 3: report to user, task stays pending but is filtered out in step 3.1
 
 ### 3.6 Loop
 
 After processing all results from a wave:
 1. Re-read `.ralph-in-claude/prd.json` (it may have been updated)
-2. Recompute the ready set (newly unblocked stories from completed dependencies)
-3. If ready stories exist → go to 3.1
+2. Go to 3.1 — `TaskList` reflects the updated dependency state automatically
+3. If ready stories exist → continue the loop
 4. If no ready stories but incomplete stories remain → report blocked stories and stop
 5. If all stories pass → proceed to completion
 
@@ -192,6 +249,8 @@ The previous attempt to implement this story failed:
 Please address this in your implementation.
 ```
 
+The retry count is tracked in `retries[story.id]`.
+
 ### Subagent Failure (retries >= 3)
 
 Report to the user:
@@ -209,7 +268,7 @@ Possible actions:
 
 ### Cycle Detected
 
-If a dependency cycle is found during DAG construction:
+If a dependency cycle is found during cycle detection (step 2.1):
 ```
 Dependency cycle detected: US-001 → US-003 → US-005 → US-001
 
@@ -218,7 +277,7 @@ Please fix the dependsOn fields in prd.json to remove the cycle.
 
 ### All Stories Blocked
 
-If no stories are ready but incomplete stories remain:
+If no stories are ready but incomplete stories remain, derive the report from `TaskList` — tasks with `status: pending` and non-empty `blockedBy`:
 ```
 All remaining stories are blocked:
 - US-004: blocked by US-002 (failed), US-003 (failed)
@@ -235,6 +294,7 @@ Resolve the failed dependencies to continue.
 2. **File overlap check** — before spawning a wave, scan story `notes` for file paths. If two stories mention the same file, run them sequentially (put one in the next wave).
 3. **prd.json writes are serialized** — only the dispatcher writes to prd.json, never subagents
 4. **progress.txt writes are serialized** — only the dispatcher appends to progress.txt
+5. **Task status updates are dispatcher-only** — subagents never call TaskCreate/TaskUpdate/TaskList. Only the dispatcher manages task lifecycle.
 
 ---
 
@@ -245,3 +305,4 @@ Resolve the failed dependencies to continue.
 - **Always read prd.json fresh** before computing the next wave — a subagent may have committed changes that affect the project state.
 - **Use `date +"%Y-%m-%dT%H:%M:%S%z"`** for all timestamps (local time).
 - **Keep the user informed** — report progress after each wave completes.
+- **Task system is ephemeral** — tasks created with TaskCreate don't survive across sessions. prd.json remains the persistent source of truth for story status. Tasks provide real-time visibility and dependency tracking within a session only.
