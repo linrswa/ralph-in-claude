@@ -149,6 +149,8 @@ ralph-in-claude/
 │       │   └── validate-prd-write.sh   # Hook: validates prd.json schema
 │       └── references/
 │           └── subagent-prompt-template.md  # Worker prompt template
+├── CLAUDE.md                           # Project instructions (auto-read by Claude Code)
+├── prd.json.example                    # Example prd.json for reference
 ├── ralph.sh                            # v1 fallback loop
 ├── prompt.md                           # v1 worker prompt
 └── plan.md                             # v2 design document
@@ -165,6 +167,7 @@ ralph-in-claude/
 | `skills/run/references/subagent-prompt-template.md` | Worker prompt template |
 | `ralph.sh` | v1 bash loop — spawns fresh Claude instances |
 | `prompt.md` | v1 instructions given to each Claude instance |
+| `prd.json.example` | Example prd.json for reference |
 | `ralph/prd.json` | v2 user stories with status tracking and dependency graph |
 | `prd.json` | v1 user stories (root-level, used by `ralph.sh`) |
 | `ralph/progress.txt` | v2 append-only learnings across iterations |
