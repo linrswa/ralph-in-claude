@@ -43,6 +43,17 @@ Options:
    - If not: `git checkout -b <branchName>` from `baseBranch` (default: `main`)
 5. **Initialize internal tracking** — create a mapping:
    - `storyIdToTaskId` — maps story IDs (e.g., `"US-001"`) to TaskCreate-returned task IDs
+6. **Write initial `.ralph-in-claude/state.json`** with the following content:
+   ```json
+   {
+     "status": "running",
+     "currentWave": 0,
+     "workers": [],
+     "failedStories": {},
+     "lastUpdated": "<current timestamp>"
+   }
+   ```
+   Use `date +"%Y-%m-%dT%H:%M:%S%z"` for the timestamp.
 
 ---
 
@@ -152,7 +163,29 @@ For each story in the wave:
 
 ### 3.4 Mark In-Progress + Spawn Subagents
 
-In a **single message**, issue both the status updates and spawn calls in parallel:
+**Before spawning, write `.ralph-in-claude/state.json`** to reflect the new wave:
+
+```json
+{
+  "status": "running",
+  "currentWave": <incremented wave number>,
+  "workers": [
+    {
+      "storyId": "<story.id>",
+      "storyTitle": "<story.title>",
+      "status": "running",
+      "startedAt": "<current timestamp>",
+      "completedAt": null,
+      "retryCount": <retry count from notes>
+    }
+    // ...one entry per story in this wave
+  ],
+  "failedStories": { /* accumulated from previous waves */ },
+  "lastUpdated": "<current timestamp>"
+}
+```
+
+Then, in a **single message**, issue both the status updates and spawn calls in parallel:
 
 1. `TaskUpdate(taskId, status: "in_progress")` for each selected story
 2. `Task(subagent_type: "senior-engineer", ...)` for each selected story
@@ -194,6 +227,21 @@ For each story:
    ```bash
    git status --porcelain -- <file1> <file2> ...
    ```
+
+**After processing each story's result, update `.ralph-in-claude/state.json`:**
+- Set the story's worker entry `status` to `"completed"` or `"failed"`
+- Set `completedAt` to the current timestamp
+- If failed, add the story to the `failedStories` record:
+  ```json
+  "failedStories": {
+    "<story.id>": {
+      "storyId": "<story.id>",
+      "reason": "<failure reason>",
+      "failedAt": "<current timestamp>"
+    }
+  }
+  ```
+- Update `lastUpdated` to the current timestamp
 
 **If verified (subagent reports PASS + typecheck passes or N/A + files confirmed):**
 - **Dispatcher commits** — stage and commit the story's files sequentially:
@@ -238,11 +286,12 @@ After processing all results from a wave:
 
 When all stories have `passes: true`:
 
-1. Report a summary to the user:
+1. **Write final `.ralph-in-claude/state.json`** with `status: "completed"`, `currentWave` set to the final wave number, all workers with their terminal statuses (`"completed"` or `"failed"`), and `lastUpdated` set to current timestamp.
+2. Report a summary to the user:
    - Total stories completed
    - Stories that required retries
    - Any notable learnings from workers
-2. Show the final state of prd.json
+3. Show the final state of prd.json
 
 ---
 
@@ -309,6 +358,7 @@ Resolve the failed dependencies to continue.
 4. **progress.txt writes are serialized** — only the dispatcher appends to progress.txt
 5. **Task status updates are dispatcher-only** — subagents never call TaskCreate/TaskUpdate/TaskList. Only the dispatcher manages task lifecycle.
 6. **All git commits are dispatcher-only** — subagents do NOT run `git add` or `git commit`. The dispatcher stages and commits each story's files sequentially after verification (§3.5), eliminating git staging race conditions.
+7. **state.json writes are dispatcher-only** — only the dispatcher writes to `.ralph-in-claude/state.json`, never subagents.
 
 ---
 
@@ -320,3 +370,4 @@ Resolve the failed dependencies to continue.
 - **Use `date +"%Y-%m-%dT%H:%M:%S%z"`** for all timestamps (local time).
 - **Keep the user informed** — report progress after each wave completes.
 - **Task system is ephemeral** — tasks created with TaskCreate don't survive across sessions. prd.json remains the persistent source of truth for story status. Tasks provide real-time visibility and dependency tracking within a session only.
+- **Update state.json at wave boundaries** — write before spawning (workers = `"running"`) and after verification (workers = `"completed"` / `"failed"`). This keeps the WebGUI Kanban board in sync with actual execution state.
