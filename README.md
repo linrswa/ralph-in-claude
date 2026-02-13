@@ -1,16 +1,29 @@
-# Ralph for Claude Code
+# 🤖 Ralph for Claude Code
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Claude Code Plugin](https://img.shields.io/badge/Claude_Code-Plugin-blue.svg)](https://claude.com/claude-code)
+
+[繁體中文](README.zh-TW.md)
 
 An autonomous AI agent system for [Claude Code](https://claude.ai/code) that iteratively implements features from a PRD. Inspired by [Geoffrey Huntley's Ralph pattern](https://ghuntley.com/ralph/).
 
 Packaged as a **Claude Code plugin** with three namespaced skills: `ralph:prd`, `ralph:convert`, `ralph:run`.
 
-## Background
+## 💡 Motivation
+
+I first came across the [original Ralph for Amp](https://github.com/snarktank/ralph) and thought the idea was brilliant — an autonomous loop that picks up stories from a PRD and implements them one by one, each in a fresh context to avoid exhaustion. I wanted to see if the same pattern could work on Claude Code, so I built a minimal bash-loop adaptation (v0.0.1).
+
+Since then, Claude Code has shipped a wave of new agentic primitives: the **Task/subagent system**, **Skills**, **Hooks**, **plugin marketplace**, and **agent definitions**. This got me curious — could the Ralph workflow be reimagined on top of these modern tools to unlock parallel execution, schema validation, and tighter orchestration?
+
+That's what this project is exploring. It works today, but honestly it doesn't feel seamless yet — there are rough edges around hook scoping, subagent coordination, and error recovery. It's a work in progress, and I'm continuously iterating to make the experience smoother.
+
+## 🔍 Background
 
 The original [Ralph](https://github.com/snarktank/ralph) was built for Amp. This project started as a Claude Code adaptation of that pattern — a simple bash loop (`ralph.sh`) that spawns fresh Claude instances sequentially.
 
 Now it's evolving into something more: leveraging Claude Code's native capabilities (Task system, Skills, Hooks) to build a smarter orchestration layer with **dependency-aware parallel execution** and **schema-validated data integrity**.
 
-## Architecture
+## 🏛️ Architecture
 
 ### v1: Sequential Bash Loop (fallback)
 
@@ -57,7 +70,7 @@ Key improvements over v1:
 
 See [plan.md](plan.md) for the full v2 design document.
 
-## Installation
+## 📦 Installation
 
 ### Prerequisites
 
@@ -92,7 +105,7 @@ See [plan.md](plan.md) for the full v2 design document.
 
 This enables `/ralph:prd`, `/ralph:convert`, and `/ralph:run` commands in any project.
 
-## Workflow
+## 🚀 Workflow
 
 **1. Create a PRD**
 
@@ -130,7 +143,7 @@ The dispatcher reads `.ralph-in-claude/prd.json`, builds a dependency DAG, and s
 
 Spawns one fresh Claude instance per story, sequentially. Useful for CI/headless environments.
 
-## Plugin Structure
+## 🏗️ Plugin Structure
 
 ```
 ralph-in-claude/
@@ -163,7 +176,7 @@ ralph-in-claude/
 > plugin level (`hooks/hooks.json`) as a workaround. When the bug is fixed, hooks can be
 > moved back to SKILL.md for skill-scoped execution.
 
-## Key Files
+## 📋 Key Files
 
 | File | Purpose |
 |------|---------|
@@ -181,7 +194,7 @@ ralph-in-claude/
 | `.ralph-in-claude/prd.json` | User stories with status tracking and dependency graph |
 | `.ralph-in-claude/progress.txt` | Append-only learnings across iterations |
 
-## Core Concepts
+## 🧩 Core Concepts
 
 ### Story Sizing
 
@@ -230,7 +243,7 @@ v2 enforces quality at two levels:
 - **`dependsOn` integrity check** — ensures all referenced story IDs exist
 - **`ensure-ralph-dir` hook** — auto-creates `.ralph-in-claude/` directory before writes
 
-## Debugging
+## 🐛 Debugging
 
 ```bash
 # See story status (v2 path; use prd.json for v1)
@@ -243,7 +256,7 @@ cat .ralph-in-claude/progress.txt
 git log --oneline -10
 ```
 
-## References
+## 🔗 References
 
 - [Geoffrey Huntley's Ralph article](https://ghuntley.com/ralph/) — the original concept
 - [Original Amp-based Ralph](https://github.com/snarktank/ralph) — the Amp implementation this project was inspired by
