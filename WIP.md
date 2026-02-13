@@ -11,13 +11,13 @@
 
 ## High
 
-- [ ] **Plugin skill hooks 可能不觸發** — GitHub Issue [#17688](https://github.com/anthropics/claude-code/issues/17688) 確認：透過 marketplace 安裝的 plugin 中，SKILL.md frontmatter 定義的 hooks 不會觸發（project skills 正常）。需測試確認當前版本是否已修復。備選方案：移到 plugin-level `hooks/hooks.json`。
+- [x] **Plugin skill hooks 可能不觸發** — ~~GitHub Issue #17688 確認 SKILL.md frontmatter hooks 在 marketplace plugin 中不觸發。~~ 實測確認 local marketplace 同樣受影響。已修正：hooks 移至 plugin-level `hooks/hooks.json`，使用 `${CLAUDE_PLUGIN_ROOT}/scripts/...` 絕對路徑。SKILL.md 保留註解。**待 #17688 修復後可移回 SKILL.md 實現 skill-scoped 觸發。**
 - [x] **同 branch 並行 git race condition** — ~~多個 subagent 共享同一 git 工作樹，file overlap check 只依賴 story `notes` 中手動提及的檔案路徑。~~ 已修正：subagent 不再執行 `git add`/`git commit`，改由 dispatcher 在 wave 結束後逐一驗證並 commit（§3.5），消除 git staging area race condition。搭配既有的 file overlap check（§3.2）防止同檔案並行修改。
 - [ ] **驗證機制不夠完整** — 三重驗證中 subagent self-report 是最弱環節（考生自己批改考卷）。Dispatcher 不驗證 acceptance criteria 是否真的被滿足。缺少：lint 強制、test 執行、dispatcher 級 diff review、AC 逐項交叉驗證。
 
 ## Medium
 
-- [ ] **Hook command 路徑解析風險** — `command: "scripts/..."` 是相對路徑，hook 在 CWD 執行時可能找不到腳本。應改用 `${CLAUDE_PLUGIN_ROOT}/skills/<skill>/scripts/...` 或確認 `CLAUDE_SKILL_DIR` 環境變數可用。
+- [x] **Hook command 路徑解析風險** — ~~`command: "scripts/..."` 是相對路徑，hook 在 CWD 執行時可能找不到腳本。~~ 已修正：hooks 移至 plugin-level `hooks/hooks.json`，command 改用 `${CLAUDE_PLUGIN_ROOT}/scripts/...`（Claude Code 自動設定的絕對路徑）。
 - [x] **Write matcher 範圍不足** — ~~目前只攔截 `Write` tool，但 `Edit` tool 也能修改 prd.json。~~ 已修正：兩個 SKILL.md 新增 `matcher: "Edit"`，validate 腳本用 Python 模擬 edit 結果後驗證。（v0.1.1）
 - [ ] **validate-prd-write.sh hook 不檢查 dependency cycle** — hook 只驗證欄位完整性和 dependsOn 參照存在，不做 DAG cycle detection。Cycle 只在 `ralph:run` 執行時才被偵測。建議把 cycle check 前移到 hook 中，在寫入時就阻擋。
 - [x] **Hook 腳本重複** — ~~`convert/scripts/` 和 `run/scripts/` 中的腳本完全相同。~~ 已修正：整合至 plugin root `scripts/`，SKILL.md 以 `../../scripts/` 引用。（v0.1.1）

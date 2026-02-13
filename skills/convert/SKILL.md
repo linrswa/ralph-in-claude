@@ -2,24 +2,9 @@
 name: convert
 description: "Convert PRDs to prd.json format for the Ralph autonomous agent system. Use when you have an existing PRD and need to convert it to Ralph's JSON format. Triggers on: convert this prd, turn this into ralph format, create prd.json from this, ralph json."
 argument-hint: "[prd-file-path]"
-hooks:
-  PreToolUse:
-    - matcher: "Write"
-      hooks:
-        - type: command
-          command: "../../scripts/ensure-ralph-dir.sh"
-          timeout: 5
-        - type: command
-          command: "../../scripts/validate-prd-write.sh"
-          timeout: 10
-    - matcher: "Edit"
-      hooks:
-        - type: command
-          command: "../../scripts/ensure-ralph-dir.sh"
-          timeout: 5
-        - type: command
-          command: "../../scripts/validate-prd-write.sh"
-          timeout: 10
+# Hooks moved to plugin-level hooks/hooks.json (SKILL.md hooks don't fire for
+# marketplace plugins — see GitHub Issue #17688). When the bug is fixed,
+# hooks can be moved back here for skill-scoped execution.
 ---
 
 # Ralph PRD Converter

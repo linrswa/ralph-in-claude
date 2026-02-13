@@ -32,11 +32,11 @@ Each iteration is a fresh Claude instance with no shared memory. State persists 
 User invokes /ralph:run
   └─ Main Claude session (dispatcher)
        ├─ Read .ralph-in-claude/prd.json, build dependency DAG
-       ├─ Wave 1: spawn up to N senior-engineer subagents (parallel, default 3)
+       ├─ Wave 1: spawn up to N ralph-worker subagents (parallel, default 3)
        │    ├─ US-001 (schema)
        │    ├─ US-002 (config)
        │    └─ US-005 (independent)
-       ├─ Verify: check git commits, run typecheck
+       ├─ Verify: check files, run typecheck, dispatcher commits per story
        ├─ Update prd.json passes, append progress.txt
        ├─ Wave 2: spawn newly unblocked stories
        │    ├─ US-003 (depended on US-001)
@@ -51,7 +51,7 @@ Key improvements over v1:
 |---|---|---|
 | Orchestration | External bash loop | Main Claude session |
 | Execution | Strictly sequential | Parallel via dependency DAG |
-| Quality checks | Soft (prompt instructions) | Skill hooks validate prd.json writes |
+| Quality checks | Soft (prompt instructions) | Plugin hooks validate prd.json writes |
 | Dependencies | Linear priority numbers | `dependsOn` DAG with topological ordering |
 | Error recovery | Blind retry next iteration | Orchestrator can intervene and re-dispatch |
 
@@ -120,7 +120,7 @@ This creates `.ralph-in-claude/prd.json` with user stories structured for autono
 /ralph:run .ralph-in-claude/prd.json 5  # custom prd path + max 5 parallel agents
 ```
 
-The dispatcher reads `.ralph-in-claude/prd.json`, builds a dependency DAG, and spawns subagent workers in parallel waves (default 3 per wave, configurable via the second argument). If max agents is set above 3, the dispatcher will prompt for confirmation about increased file race condition risk. Workers implement stories in parallel, commit, and report back. The dispatcher verifies results, updates prd.json, and spawns the next wave.
+The dispatcher reads `.ralph-in-claude/prd.json`, builds a dependency DAG, and spawns subagent workers in parallel waves (default 3 per wave, configurable via the second argument). If max agents is set above 3, the dispatcher will prompt for confirmation about increased file race condition risk. Workers implement stories in parallel and report back. The dispatcher verifies results, commits each story's files, updates prd.json, and spawns the next wave.
 
 **v1 (fallback) — sequential execution:**
 
@@ -136,44 +136,50 @@ Spawns one fresh Claude instance per story, sequentially. Useful for CI/headless
 ralph-in-claude/
 ├── .claude-plugin/
 │   └── plugin.json                     # Plugin manifest
+├── agents/
+│   └── ralph-worker.md                 # Worker agent definition (shipped with plugin)
+├── hooks/
+│   └── hooks.json                      # Plugin-level PreToolUse hooks (prd.json validation)
+├── scripts/
+│   ├── ensure-ralph-dir.sh             # Hook: auto-creates .ralph-in-claude/ dir
+│   └── validate-prd-write.sh           # Hook: validates prd.json schema (6 checks)
 ├── skills/
 │   ├── prd/
 │   │   └── SKILL.md                    # ralph:prd — PRD generator
 │   ├── convert/
-│   │   ├── SKILL.md                    # ralph:convert — PRD-to-JSON converter
-│   │   └── scripts/
-│   │       ├── ensure-ralph-dir.sh     # Hook: auto-creates .ralph-in-claude/ dir
-│   │       └── validate-prd-write.sh   # Hook: validates prd.json schema
+│   │   └── SKILL.md                    # ralph:convert — PRD-to-JSON converter
 │   └── run/
 │       ├── SKILL.md                    # ralph:run — parallel dispatcher
-│       ├── scripts/
-│       │   ├── ensure-ralph-dir.sh     # Hook: auto-creates .ralph-in-claude/ dir
-│       │   └── validate-prd-write.sh   # Hook: validates prd.json schema
 │       └── references/
-│           └── subagent-prompt-template.md  # Worker prompt template
+│           └── subagent-prompt-template.md  # Worker prompt (dynamic context only)
 ├── CLAUDE.md                           # Project instructions (auto-read by Claude Code)
-├── prd.json.example                    # Example prd.json for reference
 ├── ralph.sh                            # v1 fallback loop
 ├── prompt.md                           # v1 worker prompt
 └── plan.md                             # v2 design document
 ```
+
+> **Note on hooks:** SKILL.md frontmatter hooks don't fire for marketplace-installed plugins
+> ([#17688](https://github.com/anthropics/claude-code/issues/17688)). Hooks are defined at
+> plugin level (`hooks/hooks.json`) as a workaround. When the bug is fixed, hooks can be
+> moved back to SKILL.md for skill-scoped execution.
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
 | `.claude-plugin/plugin.json` | Plugin manifest |
+| `agents/ralph-worker.md` | Worker agent definition (role, rules, report format) |
+| `hooks/hooks.json` | Plugin-level hooks — validates prd.json on Write/Edit |
+| `scripts/ensure-ralph-dir.sh` | Auto-creates `.ralph-in-claude/` directory |
+| `scripts/validate-prd-write.sh` | Validates prd.json schema (JSON, fields, dependsOn integrity) |
 | `skills/prd/SKILL.md` | `ralph:prd` — PRD generator |
 | `skills/convert/SKILL.md` | `ralph:convert` — PRD-to-JSON converter |
 | `skills/run/SKILL.md` | `ralph:run` — parallel story dispatcher |
-| `skills/run/references/subagent-prompt-template.md` | Worker prompt template |
+| `skills/run/references/subagent-prompt-template.md` | Worker prompt template (dynamic story context) |
 | `ralph.sh` | v1 bash loop — spawns fresh Claude instances |
 | `prompt.md` | v1 instructions given to each Claude instance |
-| `prd.json.example` | Example prd.json for reference |
-| `.ralph-in-claude/prd.json` | v2 user stories with status tracking and dependency graph |
-| `prd.json` | v1 user stories (root-level, used by `ralph.sh`) |
-| `.ralph-in-claude/progress.txt` | v2 append-only learnings across iterations |
-| `progress.txt` | v1 append-only learnings (root-level) |
+| `.ralph-in-claude/prd.json` | User stories with status tracking and dependency graph |
+| `.ralph-in-claude/progress.txt` | Append-only learnings across iterations |
 
 ## Core Concepts
 
@@ -215,8 +221,8 @@ Between iterations, knowledge persists through:
 v2 enforces quality at two levels:
 
 **Dispatcher-level** (after each wave):
-- Verifies git commits exist for each completed story
-- Runs project typecheck to catch regressions
+- Verifies reported files exist, runs project typecheck
+- Dispatcher stages and commits each story's files sequentially (workers don't touch git)
 - Retries failed stories up to 3 times with failure context
 
 **Hook-level** (on every prd.json write):

@@ -1,0 +1,22 @@
+{
+  "description": "Validates prd.json schema on Write/Edit and ensures .ralph-in-claude/ directory exists",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-ralph-dir.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/validate-prd-write.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

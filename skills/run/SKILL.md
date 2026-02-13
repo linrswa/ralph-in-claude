@@ -2,24 +2,9 @@
 name: run
 description: "Run Ralph to implement all stories from prd.json. Orchestrates parallel subagent workers. Use when asked to 'run ralph', 'execute the prd', 'start ralph', 'implement all stories'."
 argument-hint: "[prd-path] [max-agents]"
-hooks:
-  PreToolUse:
-    - matcher: "Write"
-      hooks:
-        - type: command
-          command: "../../scripts/ensure-ralph-dir.sh"
-          timeout: 5
-        - type: command
-          command: "../../scripts/validate-prd-write.sh"
-          timeout: 10
-    - matcher: "Edit"
-      hooks:
-        - type: command
-          command: "../../scripts/ensure-ralph-dir.sh"
-          timeout: 5
-        - type: command
-          command: "../../scripts/validate-prd-write.sh"
-          timeout: 10
+# Hooks moved to plugin-level hooks/hooks.json (SKILL.md hooks don't fire for
+# marketplace plugins — see GitHub Issue #17688). When the bug is fixed,
+# hooks can be moved back here for skill-scoped execution.
 ---
 
 # Ralph Dispatcher — Parallel Story Execution
