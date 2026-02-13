@@ -68,7 +68,7 @@ Key improvements over v1:
 | Dependencies | Linear priority numbers | `dependsOn` DAG with topological ordering |
 | Error recovery | Blind retry next iteration | Orchestrator can intervene and re-dispatch |
 
-See [plan.md](plan.md) for the full v2 design document.
+See [docs/plan.md](docs/plan.md) for the full v2 design document.
 
 ## 📦 Installation
 
@@ -165,10 +165,12 @@ ralph-in-claude/
 │       ├── SKILL.md                    # ralph:run — parallel dispatcher
 │       └── references/
 │           └── subagent-prompt-template.md  # Worker prompt (dynamic context only)
+├── docs/
+│   ├── plan.md                         # v2 design document
+│   └── WIP.md                          # Open issues & backlog
 ├── CLAUDE.md                           # Project instructions (auto-read by Claude Code)
 ├── ralph.sh                            # v1 fallback loop
-├── prompt.md                           # v1 worker prompt
-└── plan.md                             # v2 design document
+└── prompt.md                           # v1 worker prompt
 ```
 
 > **Note on hooks:** SKILL.md frontmatter hooks don't fire for marketplace-installed plugins

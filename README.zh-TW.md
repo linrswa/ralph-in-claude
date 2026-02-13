@@ -68,7 +68,7 @@ ralph.sh
 | 依賴管理 | 線性優先數字 | `dependsOn` DAG 搭配拓撲排序 |
 | 錯誤恢復 | 下次迭代盲目重試 | 調度器可介入並重新分派 |
 
-詳見 [plan.md](plan.md) 完整的 v2 設計文件。
+詳見 [docs/plan.md](docs/plan.md) 完整的 v2 設計文件。
 
 ## 📦 安裝
 
@@ -218,10 +218,12 @@ ralph-in-claude/
 │       ├── SKILL.md                    # ralph:run — 平行調度器
 │       └── references/
 │           └── subagent-prompt-template.md  # Worker 提示（動態上下文）
+├── docs/
+│   ├── plan.md                         # v2 設計文件
+│   └── WIP.md                          # 待解決問題與待辦事項
 ├── CLAUDE.md                           # 專案指令（Claude Code 自動讀取）
 ├── ralph.sh                            # v1 備用迴圈
-├── prompt.md                           # v1 worker 提示
-└── plan.md                             # v2 設計文件
+└── prompt.md                           # v1 worker 提示
 ```
 
 > **關於 hooks 的說明：** SKILL.md frontmatter 中的 hooks 對於市集安裝的外掛不會觸發
