@@ -87,8 +87,8 @@ Convert a PRD markdown file to Ralph's JSON format:
 | `scripts/` | Shared hook scripts (ensure-ralph-dir, validate-prd-write) |
 | `skills/run/SKILL.md` | `ralph:run` — parallel story dispatcher |
 | `skills/run/references/subagent-prompt-template.md` | Worker prompt template with placeholders |
-| `ralph.sh` | v1 fallback loop script — spawns Claude iterations |
-| `prompt.md` | v1 instructions given to each Claude iteration |
+| `ralph.sh` | Bash Loop fallback — spawns Claude iterations |
+| `prompt.md` | Bash Loop instructions given to each Claude iteration |
 | `prd.json` | Current PRD with story status tracking |
 | `progress.txt` | Append-only log of learnings |
 
@@ -117,7 +117,7 @@ Both scripts are shared at the plugin root `scripts/` directory and referenced f
 
 ## Running Ralph
 
-### v2: `/ralph:run` (Recommended)
+### Native Plugin: `/ralph:run` (Recommended)
 
 Use the `/ralph:run` skill to orchestrate parallel story execution:
 
@@ -133,7 +133,7 @@ How it works:
 4. Dispatcher verifies results, updates prd.json, and spawns next wave
 5. Repeats until all stories pass or all are blocked/failed
 
-### v1: `ralph.sh` (Fallback)
+### Bash Loop: `ralph.sh` (Fallback)
 
 ```bash
 ./ralph.sh [max_iterations]  # default: 10

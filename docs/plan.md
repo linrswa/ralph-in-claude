@@ -1,14 +1,14 @@
-# Ralph v2: Design Document
+# Ralph Native Plugin: Design Document
 
-> v2 設計文件。所有階段已完成實作（Phase 1-4 ✓）。本文件保留作為架構參考。
+> Native Plugin 設計文件。所有階段已完成實作（Phase 1-4 ✓）。本文件保留作為架構參考。
 
 ---
 
 ## 1. Background
 
-### 1.1 v1 Architecture (ralph.sh)
+### 1.1 Bash Loop Architecture (ralph.sh)
 
-Ralph v1 是一個 **bash-driven sequential agent loop**：
+Ralph 的 Bash Loop 模式是一個 **bash-driven sequential agent loop**：
 
 ```
 ralph.sh (orchestrator)
@@ -32,7 +32,7 @@ ralph.sh (orchestrator)
 
 ---
 
-## 2. v2 Architecture
+## 2. Native Plugin Architecture
 
 ### 2.1 核心想法
 
@@ -55,9 +55,9 @@ User 啟動 /ralph:run
        └─ 重複直到全部完成
 ```
 
-### 2.3 v1 vs v2
+### 2.3 Bash Loop vs Native Plugin
 
-| 維度 | v1 (ralph.sh) | v2 (/ralph:run) |
+| 維度 | Bash Loop (ralph.sh) | Native Plugin (/ralph:run) |
 |------|---------------|-----------------|
 | Orchestrator | Bash loop（外部） | 主 Claude session（內部） |
 | 執行模式 | 嚴格串行 | 依賴圖平行 |

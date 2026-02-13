@@ -25,7 +25,7 @@
 
 ## 🏛️ 架構
 
-### v1：循序 Bash 迴圈（備用方案）
+### Bash Loop：循序迴圈（備用方案）
 
 ```
 ralph.sh
@@ -39,7 +39,7 @@ ralph.sh
 
 每次迭代都是全新的 Claude 實例，沒有共享記憶。狀態透過 `prd.json`、`progress.txt` 和 git 歷史持久化。
 
-### v2：原生 Claude Code 整合（`/ralph:run`）
+### Native Plugin：原生外掛整合（`/ralph:run`）
 
 ```
 使用者呼叫 /ralph:run
@@ -58,9 +58,9 @@ ralph.sh
        └─ 所有 story 完成 → 回報結果
 ```
 
-與 v1 的主要改進：
+與 Bash Loop 的主要改進：
 
-| | v1（ralph.sh） | v2（原生） |
+| | Bash Loop（ralph.sh） | Native Plugin（/ralph:run） |
 |---|---|---|
 | 調度方式 | 外部 bash 迴圈 | 主 Claude 工作階段 |
 | 執行方式 | 嚴格循序 | 透過依賴 DAG 平行執行 |
@@ -68,7 +68,7 @@ ralph.sh
 | 依賴管理 | 線性優先數字 | `dependsOn` DAG 搭配拓撲排序 |
 | 錯誤恢復 | 下次迭代盲目重試 | 調度器可介入並重新分派 |
 
-詳見 [docs/plan.md](docs/plan.md) 完整的 v2 設計文件。
+詳見 [docs/plan.md](docs/plan.md) 完整的設計文件。
 
 ## 📦 安裝
 
@@ -125,7 +125,7 @@ ralph.sh
 
 **3. 執行 Ralph**
 
-**v2（推薦）— 平行執行：**
+**Native Plugin（推薦）— 平行執行：**
 
 ```
 /ralph:run                                  # 使用 .ralph-in-claude/prd.json，預設 3 個代理
@@ -135,7 +135,7 @@ ralph.sh
 
 調度器讀取 `.ralph-in-claude/prd.json`，建立依賴 DAG，以波次方式平行啟動子代理 worker（預設每波 3 個，可透過第二個參數設定）。如果最大代理數超過 3，調度器會提示確認檔案競爭風險。Worker 平行實作 story 並回報結果。調度器驗證結果、逐一提交每個 story 的檔案、更新 prd.json，然後啟動下一波。
 
-**v1（備用）— 循序執行：**
+**Bash Loop（備用）— 循序執行：**
 
 ```bash
 ./ralph.sh [max_iterations]  # 預設：10
@@ -178,13 +178,13 @@ Story 透過 `dependsOn` 宣告依賴：
 ### 知識傳遞
 
 迭代之間的知識透過以下方式持久化：
-- **`.ralph-in-claude/progress.txt`**（v2）/ **`progress.txt`**（v1）— 僅追加的學習紀錄和程式碼庫模式
+- **`.ralph-in-claude/progress.txt`**（Native Plugin）/ **`progress.txt`**（Bash Loop）— 僅追加的學習紀錄和程式碼庫模式
 - **`CLAUDE.md`** — Claude Code 自動讀取的可重用模式
 - **Git 歷史** — 先前迭代提交的程式碼
 
 ### 品質把關
 
-v2 在兩個層級強制品質：
+Native Plugin 在兩個層級強制品質：
 
 **調度器層級**（每波結束後）：
 - 驗證回報的檔案存在、執行專案型別檢查
@@ -219,11 +219,11 @@ ralph-in-claude/
 │       └── references/
 │           └── subagent-prompt-template.md  # Worker 提示（動態上下文）
 ├── docs/
-│   ├── plan.md                         # v2 設計文件
+│   ├── plan.md                         # Native Plugin 設計文件
 │   └── WIP.md                          # 待解決問題與待辦事項
 ├── CLAUDE.md                           # 專案指令（Claude Code 自動讀取）
-├── ralph.sh                            # v1 備用迴圈
-└── prompt.md                           # v1 worker 提示
+├── ralph.sh                            # Bash Loop 備用迴圈
+└── prompt.md                           # Bash Loop worker 提示
 ```
 
 > **關於 hooks 的說明：** SKILL.md frontmatter 中的 hooks 對於市集安裝的外掛不會觸發
@@ -234,7 +234,7 @@ ralph-in-claude/
 ## 🐛 除錯
 
 ```bash
-# 查看 story 狀態（v2 路徑；v1 使用 prd.json）
+# 查看 story 狀態（Native Plugin 路徑；Bash Loop 使用 prd.json）
 jq '.userStories[] | {id, title, passes, dependsOn}' .ralph-in-claude/prd.json
 
 # 查看學習紀錄

@@ -25,7 +25,7 @@ Now it's evolving into something more: leveraging Claude Code's native capabilit
 
 ## 🏛️ Architecture
 
-### v1: Sequential Bash Loop (fallback)
+### Bash Loop (fallback)
 
 ```
 ralph.sh
@@ -39,7 +39,7 @@ ralph.sh
 
 Each iteration is a fresh Claude instance with no shared memory. State persists via `prd.json`, `progress.txt`, and git history.
 
-### v2: Native Claude Code Integration (`/ralph:run`)
+### Native Plugin (`/ralph:run`)
 
 ```
 User invokes /ralph:run
@@ -58,9 +58,9 @@ User invokes /ralph:run
        └─ All stories done → report completion
 ```
 
-Key improvements over v1:
+Key improvements over the Bash Loop:
 
-| | v1 (ralph.sh) | v2 (native) |
+| | Bash Loop (ralph.sh) | Native Plugin (/ralph:run) |
 |---|---|---|
 | Orchestration | External bash loop | Main Claude session |
 | Execution | Strictly sequential | Parallel via dependency DAG |
@@ -68,7 +68,7 @@ Key improvements over v1:
 | Dependencies | Linear priority numbers | `dependsOn` DAG with topological ordering |
 | Error recovery | Blind retry next iteration | Orchestrator can intervene and re-dispatch |
 
-See [docs/plan.md](docs/plan.md) for the full v2 design document.
+See [docs/plan.md](docs/plan.md) for the full design document.
 
 ## 📦 Installation
 
@@ -125,7 +125,7 @@ This creates `.ralph-in-claude/prd.json` with user stories structured for autono
 
 **3. Run Ralph**
 
-**v2 (recommended) — parallel execution:**
+**Native Plugin (recommended) — parallel execution:**
 
 ```
 /ralph:run                          # uses .ralph-in-claude/prd.json, default 3 agents
@@ -135,7 +135,7 @@ This creates `.ralph-in-claude/prd.json` with user stories structured for autono
 
 The dispatcher reads `.ralph-in-claude/prd.json`, builds a dependency DAG, and spawns subagent workers in parallel waves (default 3 per wave, configurable via the second argument). If max agents is set above 3, the dispatcher will prompt for confirmation about increased file race condition risk. Workers implement stories in parallel and report back. The dispatcher verifies results, commits each story's files, updates prd.json, and spawns the next wave.
 
-**v1 (fallback) — sequential execution:**
+**Bash Loop (fallback) — sequential execution:**
 
 ```bash
 ./ralph.sh [max_iterations]  # default: 10
@@ -166,11 +166,11 @@ ralph-in-claude/
 │       └── references/
 │           └── subagent-prompt-template.md  # Worker prompt (dynamic context only)
 ├── docs/
-│   ├── plan.md                         # v2 design document
+│   ├── plan.md                         # Native Plugin design document
 │   └── WIP.md                          # Open issues & backlog
 ├── CLAUDE.md                           # Project instructions (auto-read by Claude Code)
-├── ralph.sh                            # v1 fallback loop
-└── prompt.md                           # v1 worker prompt
+├── ralph.sh                            # Bash Loop fallback
+└── prompt.md                           # Bash Loop worker prompt
 ```
 
 > **Note on hooks:** SKILL.md frontmatter hooks don't fire for marketplace-installed plugins
@@ -191,8 +191,8 @@ ralph-in-claude/
 | `skills/convert/SKILL.md` | `ralph:convert` — PRD-to-JSON converter |
 | `skills/run/SKILL.md` | `ralph:run` — parallel story dispatcher |
 | `skills/run/references/subagent-prompt-template.md` | Worker prompt template (dynamic story context) |
-| `ralph.sh` | v1 bash loop — spawns fresh Claude instances |
-| `prompt.md` | v1 instructions given to each Claude instance |
+| `ralph.sh` | Bash Loop — spawns fresh Claude instances |
+| `prompt.md` | Bash Loop instructions given to each Claude instance |
 | `.ralph-in-claude/prd.json` | User stories with status tracking and dependency graph |
 | `.ralph-in-claude/progress.txt` | Append-only learnings across iterations |
 
@@ -227,13 +227,13 @@ Stories declare dependencies via `dependsOn`:
 ### Knowledge Transfer
 
 Between iterations, knowledge persists through:
-- **`.ralph-in-claude/progress.txt`** (v2) / **`progress.txt`** (v1) — append-only learnings and codebase patterns
+- **`.ralph-in-claude/progress.txt`** (Native Plugin) / **`progress.txt`** (Bash Loop) — append-only learnings and codebase patterns
 - **`CLAUDE.md`** — reusable patterns that Claude Code auto-reads
 - **Git history** — committed code from previous iterations
 
 ### Quality Gates
 
-v2 enforces quality at two levels:
+The Native Plugin enforces quality at two levels:
 
 **Dispatcher-level** (after each wave):
 - Verifies reported files exist, runs project typecheck
@@ -248,7 +248,7 @@ v2 enforces quality at two levels:
 ## 🐛 Debugging
 
 ```bash
-# See story status (v2 path; use prd.json for v1)
+# See story status (Native Plugin path; use prd.json for Bash Loop)
 jq '.userStories[] | {id, title, passes, dependsOn}' .ralph-in-claude/prd.json
 
 # See learnings
