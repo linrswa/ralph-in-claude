@@ -20,12 +20,12 @@ You are the Ralph dispatcher. Your job is to orchestrate the implementation of a
 1. **First argument** (optional): path to prd.json. Default: `.ralph-in-claude/prd.json`
 2. **Second argument** (optional): max subagents per wave. Default: `3`
 
-If `max-agents` is greater than 3, **you MUST use the `AskUserQuestion` tool** before proceeding:
+If `max-agents` is greater than 5, **you MUST use the `AskUserQuestion` tool** before proceeding:
 
 ```
-Question: "Running more than 3 parallel agents increases the risk of git file race conditions. Are you sure you want to continue with <N> max agents?"
+Question: "Running more than 5 parallel agents uses significant system resources. Are you sure you want to continue with <N> max agents?"
 Options:
-  - "Yes, I understand the risk, continue"  →  proceed with the user-specified max
+  - "Yes, continue with <N> agents"  →  proceed with the user-specified max
   - "No, use the default (3 max agents)"    →  fall back to 3
 ```
 
@@ -141,7 +141,7 @@ Cross-reference TaskList results with `storyIdToTaskId` to map back to story dat
 
 From ready stories:
 1. Sort by `priority` (lowest first)
-2. **Check for file overlap conflicts**: if story `notes` fields mention specific files, avoid running stories that touch the same files in parallel. Demote conflicting stories to the next wave.
+2. **Check for file overlap (soft warning)**: if story `notes` fields mention specific files and two stories touch the same files, log a warning but **do not demote** — worktree isolation prevents file corruption, though merge conflicts are still possible. Example: `"Warning: US-001 and US-003 may conflict at merge time (both touch src/foo.ts). Worktree isolation prevents corruption but merge conflicts are possible."`
 3. Take up to **max-agents** stories for this wave (default 3, or the value confirmed in step 0)
 
 ### 3.3 Generate Worker Prompts
@@ -156,7 +156,6 @@ For each story in the wave:
    - `{{ACCEPTANCE_CRITERIA}}` → format as a markdown checklist from `acceptanceCriteria` array
    - `{{STORY_NOTES}}` → story `notes` (or "None" if empty)
    - `{{PROJECT_NAME}}` → prd.json `project`
-   - `{{BRANCH_NAME}}` → prd.json `branchName`
    - `{{SOURCE_PRD}}` → prd.json `sourcePrd`
    - `{{CODEBASE_PATTERNS}}` → extracted from progress.txt, or "None yet"
    - `{{COMPLETED_STORIES}}` → list of completed story IDs and titles, or "None yet"
@@ -174,6 +173,7 @@ For each story in the wave:
       "storyId": "<story.id>",
       "storyTitle": "<story.title>",
       "status": "running",
+      "worktreeBranch": null,
       "startedAt": "<current timestamp>",
       "completedAt": null,
       "retryCount": <retry count from notes>
@@ -188,7 +188,7 @@ For each story in the wave:
 Then, in a **single message**, issue both the status updates and spawn calls in parallel:
 
 1. `TaskUpdate(taskId, status: "in_progress")` for each selected story
-2. `Task(subagent_type: "senior-engineer", ...)` for each selected story
+2. `Task(subagent_type: "ralph:ralph-worker", isolation: "worktree", ...)` for each selected story
 
 ```
 For each story in wave:
@@ -199,34 +199,76 @@ For each story in wave:
   Task(
     subagent_type: "ralph:ralph-worker",
     description: "<story.id> - <story.title>",
-    prompt: <generated prompt from template>
+    prompt: <generated prompt from template>,
+    isolation: "worktree"
   )
 ```
 
 **CRITICAL:** All TaskUpdate and Task calls for a wave MUST be in the same message to enable parallel execution.
 
-### 3.5 Verify Results & Commit
+### 3.5 Verify Results & Merge
 
-When all subagents in the wave return, process each story **sequentially** (one at a time, to avoid git staging race conditions):
+When all subagents in the wave return, process each story **sequentially** (one at a time, to serialize merges):
 
-For each story:
+For each completed worker:
 
 1. **Parse subagent report** — extract:
    - Status: PASS or FAIL
+   - Commit: full commit hash (or "none" if FAIL)
    - Files changed: list of relative file paths
-   - Summary, decisions, learnings
+   - Summary, learnings
 
-2. **Run typecheck** (if applicable) — check if the project has a typecheck command (look for `package.json` scripts, `tsconfig.json`, `Cargo.toml`, etc.):
-   ```bash
-   # Detect and run the appropriate typecheck
-   npm run typecheck  # or tsc --noEmit, cargo check, etc.
-   ```
-   If the project has no typecheck tooling, skip this step — it counts as passed.
+2. **If PASS:**
 
-3. **Verify files** — confirm the reported files have changes in the working tree:
-   ```bash
-   git status --porcelain -- <file1> <file2> ...
-   ```
+   a. **Run typecheck** (if applicable) — check if the project has a typecheck command (look for `package.json` scripts, `tsconfig.json`, `Cargo.toml`, etc.):
+      ```bash
+      # Detect and run the appropriate typecheck
+      npm run typecheck  # or tsc --noEmit, cargo check, etc.
+      ```
+      If the project has no typecheck tooling, skip this step — it counts as passed.
+
+   b. **Merge the worker's branch** into the feature branch:
+      ```bash
+      git merge --no-ff <worker-branch> -m "feat: <STORY_ID> - <STORY_TITLE>"
+      ```
+      The `<worker-branch>` is returned by the Task tool in its result when `isolation: "worktree"` is used.
+
+   c. **If merge succeeds:**
+      - `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "completed")` — this auto-unblocks dependent tasks
+      - Update `.ralph-in-claude/prd.json`: set the story's `passes` to `true`
+      - Append to `.ralph-in-claude/progress.txt`:
+        ```
+        ## <TIMESTAMP> - <STORY_ID>: <STORY_TITLE>
+        - <summary from subagent report>
+        - Files changed: <from subagent report>
+        - Learnings: <from subagent report>
+        ---
+        ```
+      - **Clean up worktree and branch:**
+        ```bash
+        git worktree remove <worktree-path>
+        git branch -D <worker-branch>
+        ```
+        Both `<worktree-path>` and `<worker-branch>` are returned by the Task tool result.
+
+   d. **If merge conflicts:**
+      ```bash
+      git merge --abort
+      ```
+      - Mark as FAIL with reason = `"merge conflict"`
+      - `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "pending")` — returns task to ready pool
+      - Append failure reason to the story's `notes` field in prd.json: `"Attempt N failed: merge conflict"`
+      - **Clean up worktree and branch** (same as step 2c)
+
+3. **If FAIL** (worker reported FAIL or typecheck failed):
+   - **Clean up worktree and branch:**
+     ```bash
+     git worktree remove <worktree-path>
+     git branch -D <worker-branch>
+     ```
+   - `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "pending")` — returns task to ready pool
+   - Append failure reason to the story's `notes` field in prd.json with the format `"Attempt N failed: <reason>"` (where N is the attempt number). This serves as the persistent retry counter — section 3.1 counts these entries to determine retry count.
+   - If retry count >= 3: report to user, task stays pending but is filtered out in step 3.1
 
 **After processing each story's result, update `.ralph-in-claude/state.json`:**
 - Set the story's worker entry `status` to `"completed"` or `"failed"`
@@ -242,34 +284,6 @@ For each story:
   }
   ```
 - Update `lastUpdated` to the current timestamp
-
-**If verified (subagent reports PASS + typecheck passes or N/A + files confirmed):**
-- **Dispatcher commits** — stage and commit the story's files sequentially:
-  ```bash
-  git add <file1> <file2> ...
-  git commit -m "feat: <STORY_ID> - <STORY_TITLE>"
-  ```
-- `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "completed")` — this auto-unblocks dependent tasks
-- Update `.ralph-in-claude/prd.json`: set the story's `passes` to `true`
-- Append to `.ralph-in-claude/progress.txt`:
-  ```
-  ## <TIMESTAMP> - <STORY_ID>: <STORY_TITLE>
-  - <summary from subagent report>
-  - Files changed: <from subagent report>
-  - Learnings: <from subagent report>
-  ---
-  ```
-
-**If failed:**
-- **Discard changes** for this story's files to keep the working tree clean for retries:
-  ```bash
-  git checkout -- <modified-file1> <modified-file2> ...  # revert modified files
-  rm <new-file1> <new-file2> ...                         # remove newly created files
-  ```
-  Use the file list from the subagent report. If the subagent didn't report files, run `git diff --name-only` to identify uncommitted changes (use caution — other stories' changes may be present).
-- `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "pending")` — returns task to ready pool
-- Append failure reason to the story's `notes` field in prd.json with the format `"Attempt N failed: <reason>"` (where N is the attempt number). This serves as the persistent retry counter — section 3.1 counts these entries to determine retry count.
-- If retry count >= 3: report to user, task stays pending but is filtered out in step 3.1
 
 ### 3.6 Loop
 
@@ -352,13 +366,17 @@ Resolve the failed dependencies to continue.
 
 ## 6. Concurrency Rules
 
-1. **Max subagents per wave** — defaults to 3 (configurable via `max-agents` argument). Values above 3 require user confirmation due to increased file race condition risk.
-2. **File overlap check** — before spawning a wave, scan story `notes` for file paths. If two stories mention the same file, run them sequentially (put one in the next wave).
-3. **prd.json writes are serialized** — only the dispatcher writes to prd.json, never subagents
-4. **progress.txt writes are serialized** — only the dispatcher appends to progress.txt
+1. **Max subagents per wave** — defaults to 3 (configurable via `max-agents` argument). Values above 5 require user confirmation due to resource usage.
+2. **File overlap soft warning** — before spawning a wave, scan story `notes` for file paths. If two stories mention the same file, log a warning but do not block scheduling. Worktree isolation prevents file corruption but merge conflicts are still possible.
+3. **prd.json writes are serialized** — only the dispatcher writes to prd.json, never subagents.
+4. **progress.txt writes are serialized** — only the dispatcher appends to progress.txt.
 5. **Task status updates are dispatcher-only** — subagents never call TaskCreate/TaskUpdate/TaskList. Only the dispatcher manages task lifecycle.
-6. **All git commits are dispatcher-only** — subagents do NOT run `git add` or `git commit`. The dispatcher stages and commits each story's files sequentially after verification (§3.5), eliminating git staging race conditions.
+6. **Git commit isolation** — workers commit in their own isolated worktrees. The dispatcher merges each worker's branch into the feature branch using `git merge --no-ff` after verification (§3.5).
 7. **state.json writes are dispatcher-only** — only the dispatcher writes to `.ralph-in-claude/state.json`, never subagents.
+8. **Merge serialization** — the dispatcher merges worker branches one at a time, never in parallel. This ensures a clean, linear merge sequence.
+9. **Conflict = Fail** — if `git merge --no-ff` encounters conflicts, the dispatcher runs `git merge --abort` and marks the story as failed. On retry, the worker forks from the updated HEAD (which includes previously merged stories), naturally resolving the conflict.
+10. **Worker single commit** — each worker must produce exactly one commit in its worktree. This simplifies the merge process and keeps history clean.
+11. **Worktree lifecycle** — the dispatcher cleans up every worktree and its branch after processing (`git worktree remove` + `git branch -D`), regardless of PASS or FAIL. The Task tool does NOT auto-clean worktrees that have commits.
 
 ---
 

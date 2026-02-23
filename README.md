@@ -45,16 +45,16 @@ Each iteration is a fresh Claude instance with no shared memory. State persists 
 User invokes /ralph:run
   └─ Main Claude session (dispatcher)
        ├─ Read .ralph-in-claude/prd.json, build dependency DAG
-       ├─ Wave 1: spawn up to N ralph-worker subagents (parallel, default 3)
-       │    ├─ US-001 (schema)
-       │    ├─ US-002 (config)
-       │    └─ US-005 (independent)
-       ├─ Verify: check files, run typecheck, dispatcher commits per story
+       ├─ Wave 1: spawn up to N ralph-worker subagents (parallel, each in isolated worktree)
+       │    ├─ US-001 (schema)  ─── worktree
+       │    ├─ US-002 (config)  ─── worktree
+       │    └─ US-005 (independent) ─ worktree
+       ├─ Verify: run typecheck, dispatcher merges each worker branch (git merge --no-ff)
        ├─ Update prd.json passes, append progress.txt
        ├─ Wave 2: spawn newly unblocked stories
-       │    ├─ US-003 (depended on US-001)
-       │    └─ US-004 (depended on US-002)
-       ├─ Verify, update, repeat
+       │    ├─ US-003 (depended on US-001) ─ worktree
+       │    └─ US-004 (depended on US-002) ─ worktree
+       ├─ Verify, merge, update, repeat
        └─ All stories done → report completion
 ```
 
@@ -64,6 +64,7 @@ Key improvements over the Bash Loop:
 |---|---|---|
 | Orchestration | External bash loop | Main Claude session |
 | Execution | Strictly sequential | Parallel via dependency DAG |
+| Isolation | Shared working tree | Each worker in isolated git worktree |
 | Quality checks | Soft (prompt instructions) | Plugin hooks validate prd.json writes |
 | Dependencies | Linear priority numbers | `dependsOn` DAG with topological ordering |
 | Error recovery | Blind retry next iteration | Orchestrator can intervene and re-dispatch |
@@ -133,7 +134,7 @@ This creates `.ralph-in-claude/prd.json` with user stories structured for autono
 /ralph:run .ralph-in-claude/prd.json 5  # custom prd path + max 5 parallel agents
 ```
 
-The dispatcher reads `.ralph-in-claude/prd.json`, builds a dependency DAG, and spawns subagent workers in parallel waves (default 3 per wave, configurable via the second argument). If max agents is set above 3, the dispatcher will prompt for confirmation about increased file race condition risk. Workers implement stories in parallel and report back. The dispatcher verifies results, commits each story's files, updates prd.json, and spawns the next wave.
+The dispatcher reads `.ralph-in-claude/prd.json`, builds a dependency DAG, and spawns subagent workers in parallel waves (default 3 per wave, configurable via the second argument). Each worker runs in an isolated git worktree, commits its changes independently, and reports back. The dispatcher verifies results, merges each worker's branch via `git merge --no-ff`, updates prd.json, and spawns the next wave.
 
 **Bash Loop (fallback) — sequential execution:**
 
@@ -236,8 +237,9 @@ Between iterations, knowledge persists through:
 The Native Plugin enforces quality at two levels:
 
 **Dispatcher-level** (after each wave):
-- Verifies reported files exist, runs project typecheck
-- Dispatcher stages and commits each story's files sequentially (workers don't touch git)
+- Runs project typecheck on merged results
+- Workers commit in isolated worktrees, dispatcher merges each branch via `git merge --no-ff`
+- Merge conflicts are treated as story failures (auto-aborted, retried)
 - Retries failed stories up to 3 times with failure context
 
 **Hook-level** (on every prd.json write):

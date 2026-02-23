@@ -45,16 +45,16 @@ ralph.sh
 使用者呼叫 /ralph:run
   └─ 主 Claude 工作階段（調度器）
        ├─ 讀取 .ralph-in-claude/prd.json，建立依賴 DAG
-       ├─ 第 1 波：啟動最多 N 個 ralph-worker 子代理（平行，預設 3 個）
-       │    ├─ US-001（schema）
-       │    ├─ US-002（設定）
-       │    └─ US-005（獨立）
-       ├─ 驗證：檢查檔案、執行型別檢查、調度器逐一提交每個 story
+       ├─ 第 1 波：啟動最多 N 個 ralph-worker 子代理（平行，各自在獨立 worktree）
+       │    ├─ US-001（schema）─── worktree
+       │    ├─ US-002（設定）  ─── worktree
+       │    └─ US-005（獨立）  ─── worktree
+       ├─ 驗證：執行型別檢查、調度器逐一合併 worker 分支（git merge --no-ff）
        ├─ 更新 prd.json passes，追加 progress.txt
        ├─ 第 2 波：啟動新解除封鎖的 story
-       │    ├─ US-003（依賴 US-001）
-       │    └─ US-004（依賴 US-002）
-       ├─ 驗證、更新、重複
+       │    ├─ US-003（依賴 US-001）─ worktree
+       │    └─ US-004（依賴 US-002）─ worktree
+       ├─ 驗證、合併、更新、重複
        └─ 所有 story 完成 → 回報結果
 ```
 
@@ -64,6 +64,7 @@ ralph.sh
 |---|---|---|
 | 調度方式 | 外部 bash 迴圈 | 主 Claude 工作階段 |
 | 執行方式 | 嚴格循序 | 透過依賴 DAG 平行執行 |
+| 隔離方式 | 共用工作目錄 | 每個 worker 在獨立 git worktree |
 | 品質檢查 | 軟性（提示指令） | 外掛 hook 驗證 prd.json 寫入 |
 | 依賴管理 | 線性優先數字 | `dependsOn` DAG 搭配拓撲排序 |
 | 錯誤恢復 | 下次迭代盲目重試 | 調度器可介入並重新分派 |
@@ -133,7 +134,7 @@ ralph.sh
 /ralph:run .ralph-in-claude/prd.json 5     # 自訂路徑 + 最多 5 個平行代理
 ```
 
-調度器讀取 `.ralph-in-claude/prd.json`，建立依賴 DAG，以波次方式平行啟動子代理 worker（預設每波 3 個，可透過第二個參數設定）。如果最大代理數超過 3，調度器會提示確認檔案競爭風險。Worker 平行實作 story 並回報結果。調度器驗證結果、逐一提交每個 story 的檔案、更新 prd.json，然後啟動下一波。
+調度器讀取 `.ralph-in-claude/prd.json`，建立依賴 DAG，以波次方式平行啟動子代理 worker（預設每波 3 個，可透過第二個參數設定）。每個 worker 在獨立的 git worktree 中運行，獨立提交變更後回報結果。調度器驗證結果、透過 `git merge --no-ff` 逐一合併 worker 分支、更新 prd.json，然後啟動下一波。
 
 **Bash Loop（備用）— 循序執行：**
 
@@ -187,8 +188,9 @@ Story 透過 `dependsOn` 宣告依賴：
 Native Plugin 在兩個層級強制品質：
 
 **調度器層級**（每波結束後）：
-- 驗證回報的檔案存在、執行專案型別檢查
-- 調度器逐一暫存並提交每個 story 的檔案（worker 不碰 git）
+- 執行專案型別檢查
+- Worker 在隔離 worktree 中提交，調度器透過 `git merge --no-ff` 逐一合併分支
+- 合併衝突視為 story 失敗（自動中止，重試）
 - 對失敗的 story 最多重試 3 次，附帶失敗上下文
 
 **Hook 層級**（每次 prd.json 寫入時）：

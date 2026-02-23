@@ -128,9 +128,9 @@ Use the `/ralph:run` skill to orchestrate parallel story execution:
 
 How it works:
 1. Reads prd.json and builds a dependency DAG from `dependsOn` fields
-2. Spawns up to 3 subagent workers in parallel per wave
-3. Workers implement stories, run quality checks, and commit
-4. Dispatcher verifies results, updates prd.json, and spawns next wave
+2. Spawns up to N subagent workers in parallel per wave, each in an isolated git worktree
+3. Workers implement stories, run quality checks, and commit in their worktree
+4. Dispatcher verifies results, merges each worker's branch via `git merge --no-ff`, updates prd.json, and spawns next wave
 5. Repeats until all stories pass or all are blocked/failed
 
 ### Bash Loop: `ralph.sh` (Fallback)

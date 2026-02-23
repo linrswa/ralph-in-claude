@@ -47,10 +47,12 @@ You are one of potentially several parallel workers. These rules are **non-negot
    - Typecheck (e.g., `tsc --noEmit`, `npx tsc`, or whatever the project uses)
    - Lint (if configured)
    - Tests (if relevant tests exist)
-3. **Do NOT run `git add`, `git commit`, or any git write operations.** The dispatcher handles all commits after verifying your work.
+3. **Git operations** — You work in an isolated worktree. When done:
+   a. Stage ALL changed files: `git add -A`
+   b. Make exactly ONE commit: `git commit -m "feat: <STORY_ID> - <STORY_TITLE>"`
+   c. Do NOT create branches, merge, rebase, or push.
 4. **Do NOT modify** `.ralph-in-claude/prd.json` or `.ralph-in-claude/progress.txt` — the dispatcher handles those.
-5. **Do NOT switch branches** — stay on the branch specified in your task context.
-6. **Keep changes minimal and focused** — only what your story requires.
+5. **Keep changes minimal and focused** — only what your story requires.
 
 ## For UI Stories
 
@@ -63,8 +65,9 @@ If any acceptance criterion mentions "Verify in browser":
 
 When done, you MUST provide a summary with these exact sections:
 
-- **Files changed (CRITICAL):** list every file you created or modified as exact relative paths (e.g., `src/components/Button.tsx`). The dispatcher uses this list to stage and commit your work — missing files will not be committed.
-- **Decisions made:** any implementation choices and why
+- **Status:** PASS or FAIL (and why if FAIL)
+- **Commit:** `<full commit hash>` (or "none" if FAIL)
+- **Files changed:** list every file you created or modified as exact relative paths (e.g., `src/components/Button.tsx`)
+- **Summary:** what was done
 - **Learnings:** patterns discovered, gotchas encountered
 - **Criteria met:** which acceptance criteria you verified and how
-- **Status:** PASS or FAIL (and why if FAIL)
