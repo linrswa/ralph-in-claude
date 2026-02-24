@@ -19,17 +19,9 @@ Packaged as a **Claude Code plugin** with three namespaced skills: `ralph:prd`, 
 
 ## 💡 Motivation
 
-I first came across the [original Ralph for Amp](https://github.com/snarktank/ralph) and thought the idea was brilliant — an autonomous loop that picks up stories from a PRD and implements them one by one, each in a fresh context to avoid exhaustion. I wanted to see if the same pattern could work on Claude Code, so I built a minimal bash-loop adaptation (v0.0.1).
+The original [Ralph](https://github.com/snarktank/ralph) was built for Amp — an autonomous loop that picks up stories from a PRD and implements them one by one, each in a fresh context to avoid exhaustion. This project started as a Claude Code adaptation of that pattern (a simple bash loop), and is now evolving to leverage Claude Code's native agentic primitives (Task system, Skills, Hooks, plugin marketplace) for **dependency-aware parallel execution** and **schema-validated data integrity**.
 
-Since then, Claude Code has shipped a wave of new agentic primitives: the **Task/subagent system**, **Skills**, **Hooks**, **plugin marketplace**, and **agent definitions**. This got me curious — could the Ralph workflow be reimagined on top of these modern tools to unlock parallel execution, schema validation, and tighter orchestration?
-
-That's what this project is exploring. It works today, but honestly it doesn't feel seamless yet — there are rough edges around hook scoping, subagent coordination, and error recovery. It's a work in progress, and I'm continuously iterating to make the experience smoother.
-
-## 🔍 Background
-
-The original [Ralph](https://github.com/snarktank/ralph) was built for Amp. This project started as a Claude Code adaptation of that pattern — a simple bash loop (`ralph.sh`) that spawns fresh Claude instances sequentially.
-
-Now it's evolving into something more: leveraging Claude Code's native capabilities (Task system, Skills, Hooks) to build a smarter orchestration layer with **dependency-aware parallel execution** and **schema-validated data integrity**.
+It works today, but there are still rough edges around hook scoping, subagent coordination, and error recovery. Work in progress.
 
 ## 🏛️ Architecture
 
@@ -107,17 +99,6 @@ Each iteration is a fresh Claude instance with no shared memory. State persists 
 │   Repeat waves until: all passes=true  or  max waves exhausted            │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
-
-Key improvements over the Bash Loop:
-
-| | Bash Loop (ralph.sh) | Native Plugin (/ralph:run) |
-|---|---|---|
-| Orchestration | External bash loop | Main Claude session |
-| Execution | Strictly sequential | Parallel via dependency DAG |
-| Isolation | Shared working tree | Each worker in isolated git worktree |
-| Quality checks | Soft (prompt instructions) | Plugin hooks validate prd.json writes |
-| Dependencies | Linear priority numbers | `dependsOn` DAG with topological ordering |
-| Error recovery | Blind retry next iteration | Orchestrator can intervene and re-dispatch |
 
 See [docs/plan.md](docs/plan.md) for the full design document.
 
@@ -231,26 +212,6 @@ ralph-in-claude/
 > plugin level (`hooks/hooks.json`) as a workaround. When the bug is fixed, hooks can be
 > moved back to SKILL.md for skill-scoped execution.
 
-## 📋 Key Files
-
-| File | Purpose |
-|------|---------|
-| `.claude-plugin/plugin.json` | Plugin manifest |
-| `agents/ralph-worker.md` | Worker agent definition (role, rules, report format) |
-| `agents/conflict-resolver.md` | Conflict resolution agent (experimental, untested) |
-| `hooks/hooks.json` | Plugin-level hooks — validates prd.json on Write/Edit |
-| `scripts/ensure-ralph-dir.sh` | Auto-creates `.ralph-in-claude/` directory |
-| `scripts/validate-prd-write.sh` | Validates prd.json schema (JSON, fields, dependsOn integrity) |
-| `skills/prd/SKILL.md` | `ralph:prd` — PRD generator |
-| `skills/convert/SKILL.md` | `ralph:convert` — PRD-to-JSON converter |
-| `skills/run/SKILL.md` | `ralph:run` — parallel story dispatcher |
-| `skills/run/references/subagent-prompt-template.md` | Worker prompt template (dynamic story context) |
-| `skills/run/references/conflict-resolver-prompt-template.md` | Conflict resolver prompt template (experimental) |
-| `ralph.sh` | Bash Loop — spawns fresh Claude instances |
-| `prompt.md` | Bash Loop instructions given to each Claude instance |
-| `.ralph-in-claude/prd.json` | User stories with status tracking and dependency graph |
-| `.ralph-in-claude/progress.txt` | Append-only learnings across iterations |
-
 ## 🧩 Core Concepts
 
 ### Story Sizing
@@ -313,18 +274,8 @@ The project-level `conflictStrategy` controls how the dispatcher handles overlap
 
 ### Quality Gates
 
-The Native Plugin enforces quality at two levels:
-
-**Dispatcher-level** (after each wave):
-- Runs project typecheck on merged results
-- Workers commit in isolated worktrees, dispatcher merges each branch via `git merge --no-ff`
-- Merge conflicts go through the tiered resolution pipeline (see [Shared Files & Conflict Resolution](#shared-files--conflict-resolution-experimental-untested))
-- Retries failed stories up to 3 times with failure context
-
-**Hook-level** (on every prd.json write):
-- **prd.json validation hook** — blocks writes with invalid JSON or missing fields
-- **`dependsOn` integrity check** — ensures all referenced story IDs exist
-- **`ensure-ralph-dir` hook** — auto-creates `.ralph-in-claude/` directory before writes
+- **Dispatcher:** typecheck after each wave, `git merge --no-ff` per worker branch, retries failed stories up to 3 times
+- **Hooks:** validates prd.json schema on every Write/Edit (JSON integrity, required fields, `dependsOn` referential check)
 
 ## 🐛 Debugging
 
