@@ -18,7 +18,7 @@ You are the Ralph dispatcher. Your job is to orchestrate the implementation of a
 `$ARGUMENTS` may contain up to two positional arguments: `[prd-path] [max-agents]`
 
 1. **First argument** (optional): path to prd.json. Default: `.ralph-in-claude/prd.json`
-2. **Second argument** (optional): max subagents per wave. Default: `3`
+2. **Second argument** (optional): max subagents per wave. Default: `5`
 
 If `max-agents` is greater than 5, **you MUST use the `AskUserQuestion` tool** before proceeding:
 
@@ -26,7 +26,7 @@ If `max-agents` is greater than 5, **you MUST use the `AskUserQuestion` tool** b
 Question: "Running more than 5 parallel agents uses significant system resources. Are you sure you want to continue with <N> max agents?"
 Options:
   - "Yes, continue with <N> agents"  →  proceed with the user-specified max
-  - "No, use the default (3 max agents)"    →  fall back to 3
+  - "No, use the default (5 max agents)"    →  fall back to 5
 ```
 
 **Do NOT skip this confirmation.** Store the final max-agents value for use in section 3.2.
@@ -167,7 +167,7 @@ From ready stories:
 
    - Log deferrals: `"Deferred <STORY_ID> to next wave: shares <file> (<conflictType>) with <OTHER_ID>"`
    - Log parallel allowances: `"Allowing <STORY_ID> parallel with <OTHER_ID>: both append-only on <file>"`
-4. Take up to **max-agents** stories for this wave (default 3, or the value confirmed in step 0)
+4. Take up to **max-agents** stories for this wave (default 5, or the value confirmed in step 0)
 
 ### 3.3 Generate Worker Prompts
 
@@ -473,7 +473,7 @@ Resolve the failed dependencies to continue.
 
 ## 6. Concurrency Rules
 
-1. **Max subagents per wave** — defaults to 3 (configurable via `max-agents` argument). Values above 5 require user confirmation due to resource usage.
+1. **Max subagents per wave** — defaults to 5 (configurable via `max-agents` argument). Values above 5 require user confirmation due to resource usage.
 2. **prd.json writes are serialized** — only the dispatcher writes to prd.json, never subagents.
 3. **progress.txt writes are serialized** — only the dispatcher appends to progress.txt.
 4. **Task status updates are dispatcher-only** — subagents never call TaskCreate/TaskUpdate/TaskList. Only the dispatcher manages task lifecycle.
