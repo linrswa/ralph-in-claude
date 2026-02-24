@@ -38,15 +38,19 @@ Options:
 1. **Read prd.json** at the path determined in step 0.
 2. **Read `.ralph-in-claude/progress.txt`** if it exists — extract the `## Codebase Patterns` section for passing to workers.
 3. **Read the source PRD** from the `sourcePrd` field for additional context.
-4. **Check git branch** — ensure you're on the branch specified by `branchName`. If not:
+4. **Read `conflictStrategy`** from prd.json (defaults to `"conservative"` if absent). Log which mode is active:
+   - `"conservative"` — all sharedFiles overlaps defer to separate waves (maximum safety)
+   - `"optimistic"` — only `structural-modify` overlaps defer; `append-only` overlaps run in parallel; conflict resolver agent available on merge failure
+5. **Check git branch** — ensure you're on the branch specified by `branchName`. If not:
    - If the branch exists: `git checkout <branchName>`
    - If not: `git checkout -b <branchName>` from `baseBranch` (default: `main`)
-5. **Initialize internal tracking** — create a mapping:
+6. **Initialize internal tracking** — create a mapping:
    - `storyIdToTaskId` — maps story IDs (e.g., `"US-001"`) to TaskCreate-returned task IDs
-6. **Write initial `.ralph-in-claude/state.json`** with the following content:
+7. **Write initial `.ralph-in-claude/state.json`** with the following content:
    ```json
    {
      "status": "running",
+     "conflictStrategy": "<conservative or optimistic>",
      "currentWave": 0,
      "workers": [],
      "failedStories": {},
@@ -141,11 +145,29 @@ Cross-reference TaskList results with `storyIdToTaskId` to map back to story dat
 
 From ready stories:
 1. Sort by `priority` (lowest first)
-2. **sharedFiles-aware scheduling**: check each story's `sharedFiles` array for overlap with already-selected stories in this wave:
-   - If a story shares any file (from `sharedFiles`) with an already-selected story: **defer it to the next wave** (do not include it in this wave)
-   - Log: `"Deferred <STORY_ID> to next wave: shares <file> with <OTHER_ID>"`
-   - This prevents predictable merge conflicts. Combined with P0 append-only auto-resolve (§3.5 step 2d), even missed overlaps can be handled automatically.
-3. Take up to **max-agents** stories for this wave (default 3, or the value confirmed in step 0)
+2. **Normalize sharedFiles** — for each story, normalize its `sharedFiles` entries:
+   - String entry `"src/index.ts"` → `{ file: "src/index.ts", conflictType: "structural-modify" }`
+   - Object entry → use as-is
+3. **Conflict-aware scheduling** — for each candidate story, check for overlaps with already-selected stories in this wave:
+   - Find shared files (by `file` path) between the candidate and each already-selected story
+   - For each overlapping file, determine if parallel execution is safe:
+
+   **If `conflictStrategy` is `"conservative"` (default):**
+   - Defer on ANY overlap, regardless of conflictType (current behavior)
+
+   **If `conflictStrategy` is `"optimistic"`:**
+   - Defer only if EITHER story declares `structural-modify` for the overlapping file
+   - Allow parallel if BOTH stories declare `append-only` for the overlapping file
+
+   | Story A conflictType | Story B conflictType | Parallel? |
+   |----------------------|----------------------|-----------|
+   | append-only          | append-only          | Yes       |
+   | append-only          | structural-modify    | No        |
+   | structural-modify    | structural-modify    | No        |
+
+   - Log deferrals: `"Deferred <STORY_ID> to next wave: shares <file> (<conflictType>) with <OTHER_ID>"`
+   - Log parallel allowances: `"Allowing <STORY_ID> parallel with <OTHER_ID>: both append-only on <file>"`
+4. Take up to **max-agents** stories for this wave (default 3, or the value confirmed in step 0)
 
 ### 3.3 Generate Worker Prompts
 
@@ -209,7 +231,7 @@ For each story in wave:
 
 **CRITICAL:** All TaskUpdate and Task calls for a wave MUST be in the same message to enable parallel execution.
 
-### 3.5 Verify Results & Merge
+### 3.5 Verify Results & Merge (Four-Tier Pipeline)
 
 When all subagents in the wave return, process each story **sequentially** (one at a time, to serialize merges):
 
@@ -236,7 +258,7 @@ For each completed worker:
       ```
       The `<worker-branch>` is returned by the Task tool in its result when `isolation: "worktree"` is used.
 
-   c. **If merge succeeds:**
+   c. **Tier 1 — Clean merge (no conflicts):**
       - `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "completed")` — this auto-unblocks dependent tasks
       - Update `.ralph-in-claude/prd.json`: set the story's `passes` to `true`
       - Append to `.ralph-in-claude/progress.txt`:
@@ -254,7 +276,8 @@ For each completed worker:
         ```
         Both `<worktree-path>` and `<worker-branch>` are returned by the Task tool result.
 
-   d. **If merge conflicts, attempt auto-resolve:**
+   d. **Tier 2 — Append-only auto-resolve:**
+      If merge conflicts occur, check if they are append-only:
       1. List conflicted files: `git diff --name-only --diff-filter=U`
       2. For each conflicted file, check if ALL conflict hunks are append-only:
          - The merge already uses `merge.conflictStyle=diff3` (set in step 2b), so conflict markers include the `|||||||` base section
@@ -265,13 +288,84 @@ For each completed worker:
          - `git add <conflicted-files>`
          - `git commit --no-edit` (completes the merge)
          - Log: `"Auto-resolved append-only conflict in <files>"`
-         - Proceed as PASS (step 2c)
-      4. If ANY conflict has non-empty base (true modification conflict):
-         - `git merge --abort`
+         - Proceed as Tier 1 PASS (step 2c)
+      4. If ANY conflict has non-empty base → fall through to Tier 3
+
+   e. **Tier 3 — Conflict resolver agent (optimistic mode only):**
+      If `conflictStrategy` is `"optimistic"` AND Tier 2 failed (non-append-only conflicts):
+      1. **Do NOT abort the merge** — leave the merge in its conflict state (`MERGE_HEAD` exists, conflict markers in files)
+      2. **Identify the conflicting merged story** — match conflicted files against each previously-merged worker's "Files changed" report from this wave to find which merged story caused the conflict
+      3. **Capture both stories' diffs** restricted to conflicted files:
+         ```bash
+         # Get the failed story's diff on conflicted files
+         git diff <merge-base>..<worker-branch> -- <conflicted-files>
+         # Get the merged story's diff on conflicted files
+         git diff <merge-base>..<merged-story-commit> -- <conflicted-files>
+         ```
+      4. **Generate resolver prompt** — read the template at `references/conflict-resolver-prompt-template.md` and substitute placeholders:
+         - `{{FAILED_STORY_ID}}`, `{{FAILED_STORY_TITLE}}`, `{{FAILED_STORY_DESCRIPTION}}`, `{{FAILED_STORY_CRITERIA}}` — from the story being merged
+         - `{{MERGED_STORY_ID}}`, `{{MERGED_STORY_TITLE}}`, `{{MERGED_STORY_DESCRIPTION}}`, `{{MERGED_STORY_CRITERIA}}` — from the identified conflicting merged story
+         - `{{CONFLICTED_FILES}}` — list of files with conflicts
+         - `{{BRANCH_NAME}}` — the worker branch being merged
+         - `{{MERGED_STORY_DIFF}}` — diff of the merged story on conflicted files
+         - `{{FAILED_STORY_DIFF}}` — diff of the failed story on conflicted files
+         - `{{PROJECT_NAME}}` — prd.json `project`
+         - `{{SOURCE_PRD}}` — prd.json `sourcePrd`
+         - `{{CODEBASE_PATTERNS}}` — extracted from progress.txt, or "None yet"
+      5. **Spawn conflict resolver** — this is a **blocking** call (NOT in worktree — must work in the main tree where `MERGE_HEAD` exists):
+         ```
+         Task(
+           subagent_type: "ralph:conflict-resolver",
+           description: "Resolve conflict: <STORY_ID> vs <MERGED_STORY_ID>",
+           prompt: <generated prompt from template>
+         )
+         ```
+         **CRITICAL:** Do NOT use `isolation: "worktree"` — the resolver must work in the main working tree where the merge conflict state exists.
+      6. **Parse resolver report** — extract Status, Commit, Confidence
+      7. **If resolver PASS AND typecheck passes:**
+         - Proceed as Tier 1 PASS (step 2c)
+         - Log: `"Conflict resolved by resolver agent (<CONFIDENCE> confidence): <files>"`
+      8. **If resolver FAIL, confidence LOW, or typecheck fails:**
+         - `git merge --abort` (or `git reset --hard HEAD` if the resolver already committed)
+         - Fall through to Tier 4
+
+   f. **Tier 4 — Remediation or FAIL:**
+      If all previous tiers failed:
+      1. **If `conflictStrategy` is `"conservative"` OR Tier 3 was skipped:**
+         - `git merge --abort` (if not already aborted)
          - Mark as FAIL with reason = `"merge conflict"`
          - `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "pending")` — returns task to ready pool
          - Append failure reason to the story's `notes` field in prd.json: `"Attempt N failed: merge conflict"`
          - **Clean up worktree and branch** (same as step 2c)
+      2. **If `conflictStrategy` is `"optimistic"` AND the story's `remediationDepth` (default 0) is less than 2:**
+         - `git merge --abort` (if not already aborted)
+         - Create a remediation story in prd.json:
+           ```json
+           {
+             "id": "US-REM-<NNN>",
+             "title": "Remediate merge conflict: <STORY_ID> vs <MERGED_STORY_ID>",
+             "description": "Resolve merge conflict between <STORY_ID> and <MERGED_STORY_ID> on files: <conflicted-files>",
+             "acceptanceCriteria": [
+               "All conflicted files are resolved",
+               "Both stories' functionality is preserved",
+               "Typecheck passes"
+             ],
+             "dependsOn": ["<MERGED_STORY_ID>"],
+             "sharedFiles": [],
+             "priority": <current story priority>,
+             "passes": false,
+             "isRemediation": true,
+             "remediationDepth": <current story's remediationDepth + 1>,
+             "notes": "Conflict context: <STORY_ID> (<STORY_TITLE>) conflicts with <MERGED_STORY_ID> (<MERGED_STORY_TITLE>) on <conflicted-files>. The failed story's changes need to be re-applied on top of the merged story."
+           }
+           ```
+         - Mark the original story as pending with note: `"Attempt N: merge conflict, remediation <US-REM-NNN> created"`
+         - `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "pending")`
+         - **Clean up worktree and branch** (same as step 2c)
+         - When the remediation story later passes and merges, the dispatcher also marks the original story as passed (check remediation notes for the original story ID)
+      3. **Otherwise (remediationDepth >= 2):**
+         - Same as conservative FAIL (step f.1)
+         - Log: `"Remediation depth limit reached for <STORY_ID>"`
 
 3. **If FAIL** (worker reported FAIL or typecheck failed):
    - **Clean up worktree and branch:**
@@ -380,16 +474,20 @@ Resolve the failed dependencies to continue.
 ## 6. Concurrency Rules
 
 1. **Max subagents per wave** — defaults to 3 (configurable via `max-agents` argument). Values above 5 require user confirmation due to resource usage.
-2. **sharedFiles-aware scheduling** — before spawning a wave, check each story's `sharedFiles` array for overlap with already-selected stories. If two stories share a file, only the first (by priority) is scheduled; the other is deferred to the next wave. This prevents predictable merge conflicts while still allowing maximum parallelism for non-overlapping stories.
-3. **prd.json writes are serialized** — only the dispatcher writes to prd.json, never subagents.
-4. **progress.txt writes are serialized** — only the dispatcher appends to progress.txt.
-5. **Task status updates are dispatcher-only** — subagents never call TaskCreate/TaskUpdate/TaskList. Only the dispatcher manages task lifecycle.
-6. **Git commit isolation** — workers commit in their own isolated worktrees. The dispatcher merges each worker's branch into the feature branch using `git merge --no-ff` after verification (§3.5).
-7. **state.json writes are dispatcher-only** — only the dispatcher writes to `.ralph-in-claude/state.json`, never subagents.
-8. **Merge serialization** — the dispatcher merges worker branches one at a time, never in parallel. This ensures a clean, linear merge sequence.
-9. **Conflict auto-resolve** — if `git merge` encounters conflicts, the dispatcher first checks if ALL hunks are append-only (diff3 base section empty). If yes, conflict markers are stripped and the merge is completed automatically. If any hunk has a non-empty base (true modification conflict), `git merge --abort` is run and the story is marked as failed. On retry, the worker forks from the updated HEAD (which includes previously merged stories), naturally resolving the conflict.
-10. **Worker single commit** — each worker must produce exactly one commit in its worktree. This simplifies the merge process and keeps history clean.
-11. **Worktree lifecycle** — the dispatcher cleans up every worktree and its branch after processing (`git worktree remove` + `git branch -D`), regardless of PASS or FAIL. The Task tool does NOT auto-clean worktrees that have commits.
+2. **prd.json writes are serialized** — only the dispatcher writes to prd.json, never subagents.
+3. **progress.txt writes are serialized** — only the dispatcher appends to progress.txt.
+4. **Task status updates are dispatcher-only** — subagents never call TaskCreate/TaskUpdate/TaskList. Only the dispatcher manages task lifecycle.
+5. **Git commit isolation** — workers commit in their own isolated worktrees. The dispatcher merges each worker's branch into the feature branch using `git merge --no-ff` after verification (§3.5).
+6. **state.json writes are dispatcher-only** — only the dispatcher writes to `.ralph-in-claude/state.json`, never subagents.
+7. **Merge serialization** — the dispatcher merges worker branches one at a time, never in parallel. This ensures a clean, linear merge sequence.
+8. **Worker single commit** — each worker must produce exactly one commit in its worktree. This simplifies the merge process and keeps history clean.
+9. **Worktree lifecycle** — the dispatcher cleans up every worktree and its branch after processing (`git worktree remove` + `git branch -D`), regardless of PASS or FAIL. The Task tool does NOT auto-clean worktrees that have commits.
+10. **Conflict-aware scheduling** — scheduling behavior depends on `conflictStrategy`:
+    - **Conservative (default):** any `sharedFiles` overlap between two stories defers the later story to the next wave. This is the safest option.
+    - **Optimistic:** only defers stories when EITHER side declares `structural-modify` for the overlapping file. If BOTH sides declare `append-only`, they run in parallel. This maximizes parallelism for barrel files, registries, and config files where stories add independent content.
+11. **Four-tier merge pipeline** — merge conflicts are resolved through escalating tiers: (1) clean merge, (2) append-only auto-resolve, (3) conflict resolver agent (optimistic mode only), (4) remediation story or FAIL. Each tier is attempted in order; falling through triggers the next.
+12. **Conflict resolver serialization** — the conflict resolver agent runs one at a time, blocking the merge pipeline. It operates in the main working tree (NOT a worktree) because it must resolve the active merge state where `MERGE_HEAD` exists. No other merges or spawns occur while a resolver is active.
+13. **Remediation depth cap** — auto-generated remediation stories have a `remediationDepth` field capped at 2. This prevents infinite remediation chains. If depth >= 2, the story falls through to FAIL.
 
 ---
 

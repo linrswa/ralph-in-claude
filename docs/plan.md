@@ -435,3 +435,93 @@ Dispatcher 啟動時執行 reconciliation：
 15. **Crash recovery reconciliation** — dispatcher 啟動時掃描 orphan worktrees + merge 殘留 + zombie stories，清理並重設
 16. **Max worktree cap** — 同時存在的 worktrees 不超過 max-agents 數量，防止磁碟空間耗盡
 17. **Retry backoff** — story 失敗後不立刻重試，套用 exponential backoff + jitter，防止 fail-respawn 循環
+
+---
+
+## 8. Phase 5c: Conflict-Aware Scheduling + Resolution Pipeline
+
+### 8.1 動機
+
+Phase 5a 的 v0.3.1 測試暴露了限制：5 個獨立 stories（US-002 到 US-006）各自只在 `src/index.ts` 追加 2 行 import，但因為 `sharedFiles` 重疊被序列化成 5 個 wave。實際上這些 append-only 修改可以被現有的 diff3 merge 邏輯自動解決。系統需要區分安全的平行修改（append-only）和真正的結構衝突，在設計時（convert）和執行時（dispatcher）兩個層面都需要改進。
+
+### 8.2 Schema 變更
+
+#### sharedFiles: string[] → (string | object)[]
+
+每個條目可以是字串（向後相容，視為 `structural-modify`）或物件：
+
+```json
+"sharedFiles": [
+  { "file": "src/index.ts", "conflictType": "append-only", "reason": "import registration" },
+  { "file": "prisma/schema.prisma", "conflictType": "structural-modify", "reason": "modifies User model" }
+]
+```
+
+- `"append-only"` = story 新增獨立內容（imports, route entries, config keys）
+- `"structural-modify"` = story 修改現有程式碼結構
+
+#### conflictStrategy（專案級別，可選）
+
+```json
+{ "conflictStrategy": "optimistic" }
+```
+
+- `"conservative"`（預設）：所有 sharedFiles 重疊都延遲到不同 wave
+- `"optimistic"`：只延遲 `structural-modify` 重疊；允許 `append-only` 重疊平行；merge 失敗時啟用 conflict resolver agent
+
+#### 修復型 Story 欄位（可選）
+
+- `isRemediation`（boolean，預設 false）：標記自動產生的修復 story
+- `remediationDepth`（integer，預設 0）：上限為 2，防止無限修復鏈
+
+### 8.3 Conflict-Aware Scheduling
+
+排程決策矩陣：
+
+| Story A | Story B | 平行? |
+|---------|---------|-------|
+| append-only | append-only | ✅ Yes |
+| append-only | structural-modify | ❌ No |
+| structural-modify | structural-modify | ❌ No |
+
+Conservative 模式下所有重疊一律延遲（現有行為不變）。
+
+### 8.4 Four-Tier Merge Pipeline
+
+1. **Tier 1**：Clean merge（無衝突）→ PASS
+2. **Tier 2**：Append-only auto-resolve → PASS（所有 hunk 的 diff3 base section 為空 → 移除標記、git add、commit）
+3. **Tier 3**（僅 optimistic 模式）：Conflict resolver agent — spawn `ralph:conflict-resolver` 在主工作目錄（非 worktree）解決衝突，blocking call，解決後 typecheck 驗證
+4. **Tier 4**：Remediation story 或 FAIL — optimistic 模式且 `remediationDepth < 2` 時建立修復 story，否則標記 FAIL
+
+### 8.5 Conflict Resolver Agent
+
+新增 `agents/conflict-resolver.md`，使用 opus model：
+- 接收含有衝突標記的工作目錄（MERGE_HEAD 存在）
+- Context 包含兩個 stories 的描述、驗收標準、diffs
+- 解決衝突後執行 typecheck 驗證
+- 回報 Status、Commit、Confidence（HIGH/MEDIUM/LOW）
+- LOW confidence 或無法解決 → 回報 FAIL，dispatcher 降級到 Tier 4
+
+### 8.6 Convert Skill 改進
+
+- 新增「Conflict Analysis」section，提供 conflictType 分類規則
+- 分類依據：registry files → append-only、config files → 視修改性質、schema files → 視修改性質
+- 跨 story 分析：偵測結構衝突，建議拆分或加依賴
+
+### 8.7 實作的檔案
+
+| 檔案 | 動作 | 內容 |
+|------|------|------|
+| `agents/conflict-resolver.md` | CREATE | Conflict resolver agent 定義 |
+| `skills/run/references/conflict-resolver-prompt-template.md` | CREATE | Resolver prompt 模板 |
+| `skills/run/SKILL.md` | MODIFY | §1 strategy 解析、§3.2 conflict-aware scheduling、§3.5 four-tier pipeline、§6 concurrency rules |
+| `skills/convert/SKILL.md` | MODIFY | Rule #10、新增 Conflict Analysis section、output format、checklist |
+| `scripts/validate-prd-write.sh` | MODIFY | 接受多型 sharedFiles、驗證新的可選欄位 |
+| `CLAUDE.md` | MODIFY | 文件化 sharedFiles 物件格式和 conflictStrategy |
+
+### Phase 5c Rules（在 5a 基礎上新增）
+
+18. **Conflict-aware scheduling** — 排程行為取決於 `conflictStrategy`：conservative 模式延遲所有重疊；optimistic 模式只延遲 `structural-modify` 重疊，允許 `append-only` 重疊平行
+19. **Four-tier merge pipeline** — 衝突解決依序嘗試：clean merge → append-only auto-resolve → conflict resolver agent（僅 optimistic）→ remediation story 或 FAIL
+20. **Conflict resolver serialization** — conflict resolver agent 一次只執行一個，在主工作目錄（非 worktree）運行，阻塞 merge pipeline
+21. **Remediation depth cap** — 自動產生的修復 story `remediationDepth` 上限為 2，防止無限修復鏈

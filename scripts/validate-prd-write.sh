@@ -127,5 +127,69 @@ if [[ -n "$INVALID_DEPS" ]]; then
   exit 2
 fi
 
+# 7. sharedFiles entries: accept string or {file: string, conflictType: "append-only"|"structural-modify", reason: string}
+INVALID_SF=$(echo "$CONTENT" | jq -r '
+  .userStories | to_entries[] |
+  .key as $idx | .value.id as $sid |
+  .value.sharedFiles | to_entries[] |
+  .value |
+  if type == "string" then empty
+  elif type == "object" then
+    if (.file | type) != "string" then
+      "Story \($sid) sharedFiles: object entry missing \"file\" string field"
+    elif (.conflictType | type) != "string" then
+      "Story \($sid) sharedFiles: object entry missing \"conflictType\" string field"
+    elif (.conflictType | IN("append-only", "structural-modify") | not) then
+      "Story \($sid) sharedFiles: invalid conflictType \"\(.conflictType)\" (must be \"append-only\" or \"structural-modify\")"
+    elif (.reason | type) != "string" then
+      "Story \($sid) sharedFiles: object entry missing \"reason\" string field"
+    else empty
+    end
+  else
+    "Story \($sid) sharedFiles: entry must be a string or {file, conflictType, reason} object, got \(type)"
+  end
+')
+
+if [[ -n "$INVALID_SF" ]]; then
+  echo "prd.json validation FAILED:" >&2
+  echo "$INVALID_SF" >&2
+  exit 2
+fi
+
+# 8. conflictStrategy (optional): must be "conservative" or "optimistic"
+CONFLICT_STRATEGY=$(echo "$CONTENT" | jq -r '.conflictStrategy // empty')
+if [[ -n "$CONFLICT_STRATEGY" ]]; then
+  if [[ "$CONFLICT_STRATEGY" != "conservative" && "$CONFLICT_STRATEGY" != "optimistic" ]]; then
+    echo "prd.json validation FAILED: conflictStrategy must be \"conservative\" or \"optimistic\", got \"$CONFLICT_STRATEGY\"" >&2
+    exit 2
+  fi
+fi
+
+# 9. Per-story optional fields: isRemediation (boolean), remediationDepth (number, max 2)
+INVALID_REM=$(echo "$CONTENT" | jq -r '
+  .userStories | to_entries[] |
+  .value.id as $sid | .value |
+  (
+    if has("isRemediation") and (.isRemediation | type) != "boolean" then
+      "Story \($sid): isRemediation must be a boolean, got \(.isRemediation | type)"
+    else empty end
+  ),
+  (
+    if has("remediationDepth") then
+      if (.remediationDepth | type) != "number" then
+        "Story \($sid): remediationDepth must be a number, got \(.remediationDepth | type)"
+      elif .remediationDepth > 2 then
+        "Story \($sid): remediationDepth must be <= 2, got \(.remediationDepth)"
+      else empty end
+    else empty end
+  )
+')
+
+if [[ -n "$INVALID_REM" ]]; then
+  echo "prd.json validation FAILED:" >&2
+  echo "$INVALID_REM" >&2
+  exit 2
+fi
+
 echo "prd.json validation passed." >&2
 exit 0

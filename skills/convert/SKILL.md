@@ -39,6 +39,7 @@ Converts existing PRDs to the prd.json format that Ralph uses for autonomous exe
   "baseBranch": "[base branch to create from, e.g. main or feature-branch]",
   "sourcePrd": "[path to original PRD file, e.g. docs/prd/feature.md]",
   "description": "[Feature description from PRD title/intro]",
+  "conflictStrategy": "optimistic",
   "userStories": [
     {
       "id": "US-001",
@@ -50,7 +51,9 @@ Converts existing PRDs to the prd.json format that Ralph uses for autonomous exe
         "Typecheck passes"
       ],
       "dependsOn": [],
-      "sharedFiles": [],
+      "sharedFiles": [
+        { "file": "src/index.ts", "conflictType": "append-only", "reason": "import registration" }
+      ],
       "priority": 1,
       "passes": false,
       "notes": ""
@@ -58,6 +61,8 @@ Converts existing PRDs to the prd.json format that Ralph uses for autonomous exe
   ]
 }
 ```
+
+> **Note:** `conflictStrategy` is optional (defaults to `"conservative"`). Use `"optimistic"` when most shared-file overlaps are `append-only`. Each `sharedFiles` entry can be a plain string (treated as `structural-modify`) or an object with `{file, conflictType, reason}`.
 
 ---
 
@@ -146,7 +151,47 @@ For stories with testable logic, also include:
 7. **branchName**: Derive from feature name, kebab-case, prefixed with `ralph/`
 8. **Always add**: "Typecheck passes" to every story's acceptance criteria
 9. **dependsOn**: Analyze the PRD for inter-story dependencies. Set `dependsOn` to an array of story IDs that must be completed before this story can start. Root stories (no dependencies) use `[]`. If a story uses a schema added by another story, it depends on that story.
-10. **sharedFiles**: Identify files this story will modify that other stories in the same wave may also modify (e.g., `src/index.ts` for import registration, `src/routes.ts` for route registration). Set to an array of relative file paths, or `[]` if the story only modifies files unique to itself. The dispatcher uses this to avoid scheduling overlapping stories in the same parallel wave.
+10. **sharedFiles**: Identify files this story will modify that other stories in the same wave may also modify. Each entry can be a **string** (backward-compatible, treated as `structural-modify`) or an **object** with conflict classification:
+    ```json
+    { "file": "src/index.ts", "conflictType": "append-only", "reason": "import registration" }
+    ```
+    - `"append-only"` — story adds new independent content (imports, route entries, config keys, new models)
+    - `"structural-modify"` — story modifies existing code structures (editing functions, changing schemas)
+    - Use the **Conflict Analysis** rules below to classify each entry
+    - Use `[]` if the story only modifies files unique to itself
+11. **conflictStrategy**: Set at the project level. Recommend `"optimistic"` when most shared-file overlaps are append-only (e.g., barrel files, registries). Recommend `"conservative"` (or omit, as it is the default) when stories make structural modifications to the same files.
+
+---
+
+## Conflict Analysis
+
+When populating `sharedFiles`, classify each entry's `conflictType` using these rules:
+
+### Classification Rules
+
+| File Type | Append-Only | Structural-Modify |
+|-----------|-------------|-------------------|
+| **Registry/barrel files** (index.ts, routes.ts) | Adding new imports, exports, or route registrations | Modifying existing imports or restructuring exports |
+| **Config files** (config.ts, env files) | Adding new config keys or sections | Changing existing config values or restructuring |
+| **Schema files** (schema.prisma, migrations) | Adding new models or tables | Modifying existing models (adding fields, changing types) |
+| **Shared utilities** (utils.ts, helpers.ts) | Adding new standalone functions | Modifying existing function signatures or logic |
+| **Package manifests** (package.json) | Adding new dependencies | Changing existing dependency versions or scripts |
+
+### Decision Process
+
+1. For each story, identify files it will modify that **other stories also modify**
+2. For each such file, determine the **nature of the change**:
+   - Is the story **adding new, independent content** (a new import line, a new route, a new function)? → `append-only`
+   - Is the story **modifying existing structures** (editing a function body, changing a schema field, restructuring imports)? → `structural-modify`
+3. **When uncertain**, default to `structural-modify` — this is the conservative, safe choice
+
+### Cross-Story Analysis
+
+After classifying all stories' shared files:
+
+1. **Check for unlock opportunities** — if multiple same-priority stories share a file and ALL declare `append-only`, they can run in parallel with `conflictStrategy: "optimistic"`. Note this as a recommendation.
+2. **Check for structural conflicts** — if two same-priority stories both declare `structural-modify` for the same file AND neither depends on the other, consider suggesting a split or adding a dependency to enforce ordering.
+3. **Recommend conflictStrategy** — if the majority of shared-file overlaps are `append-only` (e.g., 5 stories all appending to `src/index.ts`), recommend `"optimistic"` at the project level.
 
 ---
 
@@ -203,7 +248,7 @@ Add ability to mark tasks with different statuses.
         "Typecheck passes"
       ],
       "dependsOn": [],
-      "sharedFiles": ["prisma/schema.prisma"],
+      "sharedFiles": [{ "file": "prisma/schema.prisma", "conflictType": "structural-modify", "reason": "modifies schema" }],
       "priority": 1,
       "passes": false,
       "notes": "Use Prisma enum type. See PRD section 2.1 for status transition rules."
@@ -279,4 +324,6 @@ Before writing prd.json, verify:
 - [ ] `dependsOn` references are valid story IDs within this PRD
 - [ ] `dependsOn` graph has no cycles (forms a valid DAG)
 - [ ] Every story has a `sharedFiles` array (use `[]` if no shared files)
-- [ ] `sharedFiles` entries are relative file paths that other stories may also modify
+- [ ] `sharedFiles` entries use object format `{file, conflictType, reason}` with correct classification
+- [ ] `conflictType` is `"append-only"` or `"structural-modify"` per the Conflict Analysis rules
+- [ ] `conflictStrategy` is set at project level if append-only overlaps dominate (recommend `"optimistic"`)
