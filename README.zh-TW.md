@@ -9,6 +9,14 @@
 
 以 **Claude Code 外掛** 形式封裝，提供三個命名空間技能：`ralph:prd`、`ralph:convert`、`ralph:run`。
 
+## 📰 近期更新
+
+**v0.3.4** — 預設最大平行代理數從 3 增加至 5。
+
+**v0.3.2 ~ v0.3.3** — Worker 模型從 Opus 切換為 Sonnet，平衡成本與速度。
+
+**v0.3.0 ~ v0.3.1** — 平行 worker 的 worktree 隔離。新增 prd.json 的 `sharedFiles` / `conflictStrategy` 欄位、append-only 衝突自動解析、以及 conflict-resolver agent（實驗性，未經實戰測試）。
+
 ## 💡 緣起
 
 最初是看到 [原版 Ralph（for Amp）](https://github.com/snarktank/ralph)，覺得這個概念很有意思——一個自主迴圈，從 PRD 撈出 story 逐一實作，每次都用全新的 context 來避免上下文耗盡。於是想試試看能不能搬到 Claude Code 上，做了一個最簡單的 bash 迴圈版本（v0.0.1）。
@@ -28,13 +36,27 @@
 ### Bash Loop：循序迴圈（備用方案）
 
 ```
-ralph.sh
-  └─ for 迴圈 (最多 N 次迭代)
-       └─ claude -p prompt.md
-            └─ 讀取 prd.json → 選擇最高優先級的 story
-            └─ 實作 → 型別檢查 → 提交 → 設定 passes: true
-            └─ 寫入 progress.txt
-       └─ 檢查 <promise>COMPLETE</promise> → 結束或繼續
+┌──────────────────────────────────────────────────────────────────────┐
+│ ralph.sh                                                             │
+│                                                                      │
+│  ┌─ Iteration 1 (fresh Claude instance) ──────────────────────────┐  │
+│  │                                                                │  │
+│  │   prd.json ──→ Pick highest-priority ──→ Implement ──→ Commit  │  │
+│  │                incomplete story          & typecheck           │  │
+│  │                                              │                 │  │
+│  │                                              ▼                 │  │
+│  │                               Set passes: true in prd.json     │  │
+│  │                               Append to progress.txt           │  │
+│  └────────────────────────────────────────────────────────────────┘  │
+│                                  │                                   │
+│                                  ▼                                   │
+│  ┌─ Iteration 2 (fresh Claude instance, same flow) ───────────────┐  │
+│  │  ...                                                           │  │
+│  └────────────────────────────────────────────────────────────────┘  │
+│                                  │                                   │
+│                                  ▼                                   │
+│          All passes=true ──→ EXIT   or   Max iterations ──→ EXIT     │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 每次迭代都是全新的 Claude 實例，沒有共享記憶。狀態透過 `prd.json`、`progress.txt` 和 git 歷史持久化。
@@ -42,20 +64,48 @@ ralph.sh
 ### Native Plugin：原生外掛整合（`/ralph:run`）
 
 ```
-使用者呼叫 /ralph:run
-  └─ 主 Claude 工作階段（調度器）
-       ├─ 讀取 .ralph-in-claude/prd.json，建立依賴 DAG
-       ├─ 第 1 波：啟動最多 N 個 ralph-worker 子代理（平行，各自在獨立 worktree）
-       │    ├─ US-001（schema）─── worktree
-       │    ├─ US-002（設定）  ─── worktree
-       │    └─ US-005（獨立）  ─── worktree
-       ├─ 驗證：執行型別檢查、調度器逐一合併 worker 分支（git merge --no-ff）
-       ├─ 更新 prd.json passes，追加 progress.txt
-       ├─ 第 2 波：啟動新解除封鎖的 story
-       │    ├─ US-003（依賴 US-001）─ worktree
-       │    └─ US-004（依賴 US-002）─ worktree
-       ├─ 驗證、合併、更新、重複
-       └─ 所有 story 完成 → 回報結果
+┌───────────────────────────────────────────────────────────────────────────┐
+│ /ralph:run  (dispatcher)                                                  │
+│                                                                           │
+│  ┌─ 1. Read prd.json & Build Dependency DAG ──────────────────────────┐   │
+│  │                                                                    │   │
+│  │   US-001 (no deps) ──┐                                             │   │
+│  │   US-002 (no deps) ──┼── Wave 1                                    │   │
+│  │   US-005 (no deps) ──┘                                             │   │
+│  │                                                                    │   │
+│  │   US-003 (needs US-001) ──┐── Wave 2                               │   │
+│  │   US-004 (needs US-002) ──┘                                        │   │
+│  │                                                                    │   │
+│  │   US-006 (needs US-003, US-004) ── Wave 3                          │   │
+│  └────────────────────────────────────────────────────────────────────┘   │
+│                                                                           │
+│  ┌─ 2. Wave Execution (up to 5 workers in parallel) ───────────────────┐  │
+│  │                                                                     │  │
+│  │   ┌─ Worktree A ─────┐  ┌─ Worktree B ─────┐  ┌─ Worktree C ─────┐  │  │
+│  │   │  ralph-worker    │  │  ralph-worker    │  │  ralph-worker    │  │  │
+│  │   │  US-001          │  │  US-002          │  │  US-005          │  │  │
+│  │   │  implement +     │  │  implement +     │  │  implement +     │  │  │
+│  │   │  typecheck +     │  │  typecheck +     │  │  typecheck +     │  │  │
+│  │   │  commit          │  │  commit          │  │  commit          │  │  │
+│  │   └───────┬──────────┘  └───────┬──────────┘  └───────┬──────────┘  │  │
+│  │           └─────────────────────┼─────────────────────┘             │  │
+│  │                                 ▼                                   │  │
+│  │   ┌─ 3. Merge Pipeline ────────────────────────────────────────┐    │  │
+│  │   │  Tier 1: git merge --no-ff (clean merge)                   │    │  │
+│  │   │  Tier 2: append-only auto-resolve                          │    │  │
+│  │   │  Tier 3: conflict-resolver agent *                         │    │  │
+│  │   │  Tier 4: abort & retry as failed story                     │    │  │
+│  │   │                                                            │    │  │
+│  │   │  * experimental, untested — see Conflict Resolution below  │    │  │
+│  │   └────────────────────────────────────────────────────────────┘    │  │
+│  │                                 │                                   │  │
+│  │                                 ▼                                   │  │
+│  │   4. Typecheck ──→ Update prd.json ──→ Append progress.txt          │  │
+│  └─────────────────────────────────────────────────────────────────────┘  │
+│                                    │                                      │
+│                                    ▼                                      │
+│   Repeat waves until: all passes=true  or  max waves exhausted            │
+└───────────────────────────────────────────────────────────────────────────┘
 ```
 
 與 Bash Loop 的主要改進：
@@ -129,12 +179,12 @@ ralph.sh
 **Native Plugin（推薦）— 平行執行：**
 
 ```
-/ralph:run                                  # 使用 .ralph-in-claude/prd.json，預設 3 個代理
+/ralph:run                                  # 使用 .ralph-in-claude/prd.json，預設 5 個代理
 /ralph:run path/to/prd.json                # 自訂 prd 路徑
-/ralph:run .ralph-in-claude/prd.json 5     # 自訂路徑 + 最多 5 個平行代理
+/ralph:run .ralph-in-claude/prd.json 8     # 自訂路徑 + 最多 8 個平行代理
 ```
 
-調度器讀取 `.ralph-in-claude/prd.json`，建立依賴 DAG，以波次方式平行啟動子代理 worker（預設每波 3 個，可透過第二個參數設定）。每個 worker 在獨立的 git worktree 中運行，獨立提交變更後回報結果。調度器驗證結果、透過 `git merge --no-ff` 逐一合併 worker 分支、更新 prd.json，然後啟動下一波。
+調度器讀取 `.ralph-in-claude/prd.json`，建立依賴 DAG，以波次方式平行啟動子代理 worker（預設每波 5 個，可透過第二個參數設定）。每個 worker 在獨立的 git worktree 中運行，獨立提交變更後回報結果。調度器驗證結果、透過 `git merge --no-ff` 逐一合併 worker 分支、更新 prd.json，然後啟動下一波。
 
 **Bash Loop（備用）— 循序執行：**
 
@@ -183,6 +233,31 @@ Story 透過 `dependsOn` 宣告依賴：
 - **`CLAUDE.md`** — Claude Code 自動讀取的可重用模式
 - **Git 歷史** — 先前迭代提交的程式碼
 
+### 共用檔案與衝突解析（實驗性，未經實戰測試）
+
+> **注意：** 此功能已實作，但**尚未在任何實際執行中被觸發過**。目前所有測試情境都是乾淨合併或 append-only 變更自動解析。請謹慎使用。
+
+Story 可透過 `sharedFiles` 宣告多個 story 可能同時修改的共用檔案：
+
+```json
+{
+  "id": "US-003",
+  "sharedFiles": [
+    { "file": "src/index.ts", "conflictType": "append-only", "reason": "import registration" },
+    "src/config.ts"
+  ]
+}
+```
+
+專案層級的 `conflictStrategy` 控制調度器如何處理重疊的 story：
+
+- **`"conservative"`**（預設）— 將所有有 `sharedFiles` 重疊的 story 延遲到不同波次
+- **`"optimistic"`** — 允許 `append-only` 重疊在同一波次平行執行，搭配分層合併管線：
+  1. **Tier 1：** `git merge` — 乾淨合併成功即完成
+  2. **Tier 2：** Append-only 自動解析 — 自動解析標記為 `append-only` 的檔案衝突標記
+  3. **Tier 3：** 衝突解析代理 — 啟動 `conflict-resolver` 子代理智慧解析結構性衝突
+  4. **Tier 4：** 中止並重試 — 將該 story 視為失敗
+
 ### 品質把關
 
 Native Plugin 在兩個層級強制品質：
@@ -190,7 +265,7 @@ Native Plugin 在兩個層級強制品質：
 **調度器層級**（每波結束後）：
 - 執行專案型別檢查
 - Worker 在隔離 worktree 中提交，調度器透過 `git merge --no-ff` 逐一合併分支
-- 合併衝突視為 story 失敗（自動中止，重試）
+- 合併衝突透過分層解析管線處理（見[共用檔案與衝突解析](#共用檔案與衝突解析實驗性未經實戰測試)）
 - 對失敗的 story 最多重試 3 次，附帶失敗上下文
 
 **Hook 層級**（每次 prd.json 寫入時）：
@@ -205,7 +280,8 @@ ralph-in-claude/
 ├── .claude-plugin/
 │   └── plugin.json                     # 外掛清單
 ├── agents/
-│   └── ralph-worker.md                 # Worker 代理定義（隨外掛發佈）
+│   ├── ralph-worker.md                 # Worker 代理定義（隨外掛發佈）
+│   └── conflict-resolver.md            # 衝突解析代理（實驗性，未經實戰測試）
 ├── hooks/
 │   └── hooks.json                      # 外掛層級 PreToolUse hooks（prd.json 驗證）
 ├── scripts/
@@ -219,7 +295,8 @@ ralph-in-claude/
 │   └── run/
 │       ├── SKILL.md                    # ralph:run — 平行調度器
 │       └── references/
-│           └── subagent-prompt-template.md  # Worker 提示（動態上下文）
+│           ├── subagent-prompt-template.md  # Worker 提示（動態上下文）
+│           └── conflict-resolver-prompt-template.md  # 衝突解析提示（實驗性）
 ├── docs/
 │   ├── plan.md                         # Native Plugin 設計文件
 │   └── WIP.md                          # 待解決問題與待辦事項

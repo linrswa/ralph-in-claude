@@ -9,6 +9,14 @@ An autonomous AI agent system for [Claude Code](https://claude.ai/code) that ite
 
 Packaged as a **Claude Code plugin** with three namespaced skills: `ralph:prd`, `ralph:convert`, `ralph:run`.
 
+## 📰 Recent Updates
+
+**v0.3.4** — Default max parallel agents increased from 3 to 5.
+
+**v0.3.2 ~ v0.3.3** — Switched ralph-worker model from Opus to Sonnet for better cost/speed balance.
+
+**v0.3.0 ~ v0.3.1** — Worktree isolation for parallel workers. Added `sharedFiles` / `conflictStrategy` fields to prd.json, append-only conflict auto-resolve, and conflict-resolver agent (experimental, untested).
+
 ## 💡 Motivation
 
 I first came across the [original Ralph for Amp](https://github.com/snarktank/ralph) and thought the idea was brilliant — an autonomous loop that picks up stories from a PRD and implements them one by one, each in a fresh context to avoid exhaustion. I wanted to see if the same pattern could work on Claude Code, so I built a minimal bash-loop adaptation (v0.0.1).
@@ -28,13 +36,27 @@ Now it's evolving into something more: leveraging Claude Code's native capabilit
 ### Bash Loop (fallback)
 
 ```
-ralph.sh
-  └─ for loop (max N iterations)
-       └─ claude -p prompt.md
-            └─ Read prd.json → pick highest-priority story
-            └─ Implement → typecheck → commit → set passes: true
-            └─ Write progress.txt
-       └─ Check <promise>COMPLETE</promise> → exit or continue
+┌──────────────────────────────────────────────────────────────────────┐
+│ ralph.sh                                                             │
+│                                                                      │
+│  ┌─ Iteration 1 (fresh Claude instance) ──────────────────────────┐  │
+│  │                                                                │  │
+│  │   prd.json ──→ Pick highest-priority ──→ Implement ──→ Commit  │  │
+│  │                incomplete story          & typecheck           │  │
+│  │                                              │                 │  │
+│  │                                              ▼                 │  │
+│  │                               Set passes: true in prd.json     │  │
+│  │                               Append to progress.txt           │  │
+│  └────────────────────────────────────────────────────────────────┘  │
+│                                  │                                   │
+│                                  ▼                                   │
+│  ┌─ Iteration 2 (fresh Claude instance, same flow) ───────────────┐  │
+│  │  ...                                                           │  │
+│  └────────────────────────────────────────────────────────────────┘  │
+│                                  │                                   │
+│                                  ▼                                   │
+│          All passes=true ──→ EXIT   or   Max iterations ──→ EXIT     │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 Each iteration is a fresh Claude instance with no shared memory. State persists via `prd.json`, `progress.txt`, and git history.
@@ -42,20 +64,48 @@ Each iteration is a fresh Claude instance with no shared memory. State persists 
 ### Native Plugin (`/ralph:run`)
 
 ```
-User invokes /ralph:run
-  └─ Main Claude session (dispatcher)
-       ├─ Read .ralph-in-claude/prd.json, build dependency DAG
-       ├─ Wave 1: spawn up to N ralph-worker subagents (parallel, each in isolated worktree)
-       │    ├─ US-001 (schema)  ─── worktree
-       │    ├─ US-002 (config)  ─── worktree
-       │    └─ US-005 (independent) ─ worktree
-       ├─ Verify: run typecheck, dispatcher merges each worker branch (git merge --no-ff)
-       ├─ Update prd.json passes, append progress.txt
-       ├─ Wave 2: spawn newly unblocked stories
-       │    ├─ US-003 (depended on US-001) ─ worktree
-       │    └─ US-004 (depended on US-002) ─ worktree
-       ├─ Verify, merge, update, repeat
-       └─ All stories done → report completion
+┌───────────────────────────────────────────────────────────────────────────┐
+│ /ralph:run  (dispatcher)                                                  │
+│                                                                           │
+│  ┌─ 1. Read prd.json & Build Dependency DAG ──────────────────────────┐   │
+│  │                                                                    │   │
+│  │   US-001 (no deps) ──┐                                             │   │
+│  │   US-002 (no deps) ──┼── Wave 1                                    │   │
+│  │   US-005 (no deps) ──┘                                             │   │
+│  │                                                                    │   │
+│  │   US-003 (needs US-001) ──┐── Wave 2                               │   │
+│  │   US-004 (needs US-002) ──┘                                        │   │
+│  │                                                                    │   │
+│  │   US-006 (needs US-003, US-004) ── Wave 3                          │   │
+│  └────────────────────────────────────────────────────────────────────┘   │
+│                                                                           │
+│  ┌─ 2. Wave Execution (up to 5 workers in parallel) ───────────────────┐  │
+│  │                                                                     │  │
+│  │   ┌─ Worktree A ─────┐  ┌─ Worktree B ─────┐  ┌─ Worktree C ─────┐  │  │
+│  │   │  ralph-worker    │  │  ralph-worker    │  │  ralph-worker    │  │  │
+│  │   │  US-001          │  │  US-002          │  │  US-005          │  │  │
+│  │   │  implement +     │  │  implement +     │  │  implement +     │  │  │
+│  │   │  typecheck +     │  │  typecheck +     │  │  typecheck +     │  │  │
+│  │   │  commit          │  │  commit          │  │  commit          │  │  │
+│  │   └───────┬──────────┘  └───────┬──────────┘  └───────┬──────────┘  │  │
+│  │           └─────────────────────┼─────────────────────┘             │  │
+│  │                                 ▼                                   │  │
+│  │   ┌─ 3. Merge Pipeline ────────────────────────────────────────┐    │  │
+│  │   │  Tier 1: git merge --no-ff (clean merge)                   │    │  │
+│  │   │  Tier 2: append-only auto-resolve                          │    │  │
+│  │   │  Tier 3: conflict-resolver agent *                         │    │  │
+│  │   │  Tier 4: abort & retry as failed story                     │    │  │
+│  │   │                                                            │    │  │
+│  │   │  * experimental, untested — see Conflict Resolution below  │    │  │
+│  │   └────────────────────────────────────────────────────────────┘    │  │
+│  │                                 │                                   │  │
+│  │                                 ▼                                   │  │
+│  │   4. Typecheck ──→ Update prd.json ──→ Append progress.txt          │  │
+│  └─────────────────────────────────────────────────────────────────────┘  │
+│                                    │                                      │
+│                                    ▼                                      │
+│   Repeat waves until: all passes=true  or  max waves exhausted            │
+└───────────────────────────────────────────────────────────────────────────┘
 ```
 
 Key improvements over the Bash Loop:
@@ -129,12 +179,12 @@ This creates `.ralph-in-claude/prd.json` with user stories structured for autono
 **Native Plugin (recommended) — parallel execution:**
 
 ```
-/ralph:run                          # uses .ralph-in-claude/prd.json, default 3 agents
+/ralph:run                          # uses .ralph-in-claude/prd.json, default 5 agents
 /ralph:run path/to/prd.json        # custom prd path
-/ralph:run .ralph-in-claude/prd.json 5  # custom prd path + max 5 parallel agents
+/ralph:run .ralph-in-claude/prd.json 8  # custom prd path + max 8 parallel agents
 ```
 
-The dispatcher reads `.ralph-in-claude/prd.json`, builds a dependency DAG, and spawns subagent workers in parallel waves (default 3 per wave, configurable via the second argument). Each worker runs in an isolated git worktree, commits its changes independently, and reports back. The dispatcher verifies results, merges each worker's branch via `git merge --no-ff`, updates prd.json, and spawns the next wave.
+The dispatcher reads `.ralph-in-claude/prd.json`, builds a dependency DAG, and spawns subagent workers in parallel waves (default 5 per wave, configurable via the second argument). Each worker runs in an isolated git worktree, commits its changes independently, and reports back. The dispatcher verifies results, merges each worker's branch via `git merge --no-ff`, updates prd.json, and spawns the next wave.
 
 **Bash Loop (fallback) — sequential execution:**
 
@@ -151,7 +201,8 @@ ralph-in-claude/
 ├── .claude-plugin/
 │   └── plugin.json                     # Plugin manifest
 ├── agents/
-│   └── ralph-worker.md                 # Worker agent definition (shipped with plugin)
+│   ├── ralph-worker.md                 # Worker agent definition (shipped with plugin)
+│   └── conflict-resolver.md            # Conflict resolution agent (experimental, untested)
 ├── hooks/
 │   └── hooks.json                      # Plugin-level PreToolUse hooks (prd.json validation)
 ├── scripts/
@@ -165,7 +216,8 @@ ralph-in-claude/
 │   └── run/
 │       ├── SKILL.md                    # ralph:run — parallel dispatcher
 │       └── references/
-│           └── subagent-prompt-template.md  # Worker prompt (dynamic context only)
+│           ├── subagent-prompt-template.md  # Worker prompt (dynamic context only)
+│           └── conflict-resolver-prompt-template.md  # Conflict resolver prompt (experimental)
 ├── docs/
 │   ├── plan.md                         # Native Plugin design document
 │   └── WIP.md                          # Open issues & backlog
@@ -185,6 +237,7 @@ ralph-in-claude/
 |------|---------|
 | `.claude-plugin/plugin.json` | Plugin manifest |
 | `agents/ralph-worker.md` | Worker agent definition (role, rules, report format) |
+| `agents/conflict-resolver.md` | Conflict resolution agent (experimental, untested) |
 | `hooks/hooks.json` | Plugin-level hooks — validates prd.json on Write/Edit |
 | `scripts/ensure-ralph-dir.sh` | Auto-creates `.ralph-in-claude/` directory |
 | `scripts/validate-prd-write.sh` | Validates prd.json schema (JSON, fields, dependsOn integrity) |
@@ -192,6 +245,7 @@ ralph-in-claude/
 | `skills/convert/SKILL.md` | `ralph:convert` — PRD-to-JSON converter |
 | `skills/run/SKILL.md` | `ralph:run` — parallel story dispatcher |
 | `skills/run/references/subagent-prompt-template.md` | Worker prompt template (dynamic story context) |
+| `skills/run/references/conflict-resolver-prompt-template.md` | Conflict resolver prompt template (experimental) |
 | `ralph.sh` | Bash Loop — spawns fresh Claude instances |
 | `prompt.md` | Bash Loop instructions given to each Claude instance |
 | `.ralph-in-claude/prd.json` | User stories with status tracking and dependency graph |
@@ -232,6 +286,31 @@ Between iterations, knowledge persists through:
 - **`CLAUDE.md`** — reusable patterns that Claude Code auto-reads
 - **Git history** — committed code from previous iterations
 
+### Shared Files & Conflict Resolution (experimental, untested)
+
+> **Note:** This feature has been implemented but has **not yet been triggered in any real-world run**. All test scenarios so far had clean merges or append-only changes that resolved automatically. Use with caution.
+
+Stories can declare shared files via `sharedFiles` to indicate files that multiple stories may modify:
+
+```json
+{
+  "id": "US-003",
+  "sharedFiles": [
+    { "file": "src/index.ts", "conflictType": "append-only", "reason": "import registration" },
+    "src/config.ts"
+  ]
+}
+```
+
+The project-level `conflictStrategy` controls how the dispatcher handles overlapping stories:
+
+- **`"conservative"`** (default) — defers all stories with overlapping `sharedFiles` to separate waves
+- **`"optimistic"`** — allows `append-only` overlaps to run in parallel, with a tiered merge pipeline:
+  1. **Tier 1:** `git merge` — if it succeeds cleanly, done
+  2. **Tier 2:** Append-only auto-resolve — automatically resolves conflict markers in files tagged `append-only`
+  3. **Tier 3:** Conflict resolver agent — spawns `conflict-resolver` subagent to intelligently resolve structural conflicts
+  4. **Tier 4:** Abort and retry — treats the story as failed
+
 ### Quality Gates
 
 The Native Plugin enforces quality at two levels:
@@ -239,7 +318,7 @@ The Native Plugin enforces quality at two levels:
 **Dispatcher-level** (after each wave):
 - Runs project typecheck on merged results
 - Workers commit in isolated worktrees, dispatcher merges each branch via `git merge --no-ff`
-- Merge conflicts are treated as story failures (auto-aborted, retried)
+- Merge conflicts go through the tiered resolution pipeline (see [Shared Files & Conflict Resolution](#shared-files--conflict-resolution-experimental-untested))
 - Retries failed stories up to 3 times with failure context
 
 **Hook-level** (on every prd.json write):
