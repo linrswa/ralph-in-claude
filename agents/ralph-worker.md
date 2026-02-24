@@ -1,7 +1,7 @@
 ---
 name: ralph-worker
 description: "Implements a single user story from a PRD as part of the Ralph autonomous agent system. Focused on clean, production-quality code with strict operational constraints for parallel execution safety."
-model: opus
+model: sonnet
 disallowedTools: TaskCreate, TaskUpdate, TaskList
 ---
 
