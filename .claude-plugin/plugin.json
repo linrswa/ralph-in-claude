@@ -1,6 +1,6 @@
 {
   "name": "ralph",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Autonomous agent system that implements features from PRDs via parallel subagent workers",
   "author": { "name": "linrswa" },
   "keywords": ["prd", "autonomous-agent", "parallel-execution", "code-generation"],
