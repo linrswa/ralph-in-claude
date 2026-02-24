@@ -98,10 +98,11 @@ MISSING=$(echo "$CONTENT" | jq -r '
     (.value.title | type) != "string" or
     (.value.acceptanceCriteria | type) != "array" or
     (.value.dependsOn | type) != "array" or
+    (.value.sharedFiles | type) != "array" or
     (.value.priority == null) or
     (.value.passes == null)
   ) |
-  "Story at index \(.key): missing required fields (need id, title, acceptanceCriteria, dependsOn, priority, passes)"
+  "Story at index \(.key): missing required fields (need id, title, acceptanceCriteria, dependsOn, sharedFiles, priority, passes)"
 ')
 
 if [[ -n "$MISSING" ]]; then

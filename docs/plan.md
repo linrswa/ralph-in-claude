@@ -164,11 +164,12 @@ feature-branch (HEAD = commit X)
 
 **Worker branch 是 ephemeral：** 合併後即刪除，不會殘留。
 
-**合併衝突處理：**
-1. `git merge --no-ff <worker-branch>` 失敗
-2. `git merge --abort` 還原
-3. 標記 story 為 failed，reason = `"merge conflict"`
-4. 下次重試時 worker 從新的 HEAD fork（包含已合併的 stories），衝突自然解決
+**合併衝突處理（Append-Only Auto-Resolve）：**
+1. `git -c merge.conflictStyle=diff3 merge --no-ff <worker-branch>` 失敗
+2. 檢查所有衝突 hunk 是否為 append-only（diff3 base section 為空）
+3. 如果全部為 append-only：移除衝突標記、`git add` + `git commit --no-edit`，視為成功
+4. 如果有任何 hunk 的 base 非空（真正的修改衝突）：`git merge --abort` 還原，標記 story 為 failed
+5. 下次重試時 worker 從新的 HEAD fork（包含已合併的 stories），衝突自然解決
 
 **同一波的 merge 順序不影響衝突機率：** 同波的 workers 都從相同 commit X fork，無論合併順序如何，衝突的 story 組合不變。
 
@@ -420,9 +421,9 @@ Dispatcher 啟動時執行 reconciliation：
 
 5. **Git commit 分離** — worker 在自己的 worktree commit；dispatcher 用 `merge --no-ff` 合併到 feature branch
 6. **Merge 序列化** — dispatcher 逐一 merge，不平行合併
-7. **Conflict = Fail** — merge 衝突視為 story 失敗，`git merge --abort` 還原，重試時 worker 從新 HEAD fork，自然解決衝突
+7. **Conflict auto-resolve** — merge 衝突時先檢查是否全部為 append-only（diff3 base section 為空）。如果是，自動移除衝突標記並完成 merge。如果有非空 base（真正修改衝突），`git merge --abort` 還原，重試時 worker 從新 HEAD fork，自然解決衝突
 8. **Worktree 生命週期** — 成功的 worktree 在 merge 後清理；失敗的 worktree 保留一段時間供 debug（不立刻丟棄）
-9. **File overlap soft warning** — worktree 隔離後 file overlap 不再阻止排程，但仍記錄警告供 debug 參考
+9. **sharedFiles-aware scheduling** — 排程時根據 story 的 `sharedFiles` 欄位偵測重疊，共用檔案的 stories 不在同一 wave 排程。搭配 append-only auto-resolve，即使遺漏也能自動處理
 10. **Worker 單一 commit** — worker prompt 明確要求 exactly one commit，簡化 merge 處理
 11. **prd.json 原子寫入** — dispatcher 寫入 prd.json 時使用 temp file + rename，避免 worker 讀到 partial JSON
 

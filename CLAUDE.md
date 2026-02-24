@@ -62,6 +62,7 @@ Convert a PRD markdown file to Ralph's JSON format:
       "description": "As a [user], I want [feature] so that [benefit]",
       "acceptanceCriteria": ["Criterion 1", "Typecheck passes"],
       "dependsOn": [],
+      "sharedFiles": [],
       "priority": 1,
       "passes": false,
       "notes": ""
@@ -76,6 +77,7 @@ Convert a PRD markdown file to Ralph's JSON format:
 - Always include "Typecheck passes" in acceptance criteria
 - For UI stories, include browser verification
 - Every story must have a `dependsOn` array declaring inter-story dependencies (story IDs). Stories won't be picked until all dependencies have `passes: true`. Use `[]` for root stories with no dependencies.
+- Every story must have a `sharedFiles` array listing files this story modifies that other stories may also modify (e.g., `["src/index.ts"]`). The dispatcher uses this to avoid scheduling overlapping stories in the same wave. Use `[]` if no shared files.
 
 ## Key Files
 

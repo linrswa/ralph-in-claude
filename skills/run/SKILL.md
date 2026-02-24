@@ -141,7 +141,10 @@ Cross-reference TaskList results with `storyIdToTaskId` to map back to story dat
 
 From ready stories:
 1. Sort by `priority` (lowest first)
-2. **Check for file overlap (soft warning)**: if story `notes` fields mention specific files and two stories touch the same files, log a warning but **do not demote** — worktree isolation prevents file corruption, though merge conflicts are still possible. Example: `"Warning: US-001 and US-003 may conflict at merge time (both touch src/foo.ts). Worktree isolation prevents corruption but merge conflicts are possible."`
+2. **sharedFiles-aware scheduling**: check each story's `sharedFiles` array for overlap with already-selected stories in this wave:
+   - If a story shares any file (from `sharedFiles`) with an already-selected story: **defer it to the next wave** (do not include it in this wave)
+   - Log: `"Deferred <STORY_ID> to next wave: shares <file> with <OTHER_ID>"`
+   - This prevents predictable merge conflicts. Combined with P0 append-only auto-resolve (§3.5 step 2d), even missed overlaps can be handled automatically.
 3. Take up to **max-agents** stories for this wave (default 3, or the value confirmed in step 0)
 
 ### 3.3 Generate Worker Prompts
@@ -229,7 +232,7 @@ For each completed worker:
 
    b. **Merge the worker's branch** into the feature branch:
       ```bash
-      git merge --no-ff <worker-branch> -m "feat: <STORY_ID> - <STORY_TITLE>"
+      git -c merge.conflictStyle=diff3 merge --no-ff <worker-branch> -m "feat: <STORY_ID> - <STORY_TITLE>"
       ```
       The `<worker-branch>` is returned by the Task tool in its result when `isolation: "worktree"` is used.
 
@@ -251,14 +254,24 @@ For each completed worker:
         ```
         Both `<worktree-path>` and `<worker-branch>` are returned by the Task tool result.
 
-   d. **If merge conflicts:**
-      ```bash
-      git merge --abort
-      ```
-      - Mark as FAIL with reason = `"merge conflict"`
-      - `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "pending")` — returns task to ready pool
-      - Append failure reason to the story's `notes` field in prd.json: `"Attempt N failed: merge conflict"`
-      - **Clean up worktree and branch** (same as step 2c)
+   d. **If merge conflicts, attempt auto-resolve:**
+      1. List conflicted files: `git diff --name-only --diff-filter=U`
+      2. For each conflicted file, check if ALL conflict hunks are append-only:
+         - The merge already uses `merge.conflictStyle=diff3` (set in step 2b), so conflict markers include the `|||||||` base section
+         - **Append-only** = the base section (between `|||||||` and `=======`) is empty for ALL hunks in ALL conflicted files
+         - Check: extract lines between `|||||||` and `=======` markers; if any non-marker content exists → NOT append-only
+      3. If ALL conflicts in ALL files are append-only:
+         - Strip conflict markers: remove lines matching `<<<<<<<`, `|||||||`, `=======`, `>>>>>>>`
+         - `git add <conflicted-files>`
+         - `git commit --no-edit` (completes the merge)
+         - Log: `"Auto-resolved append-only conflict in <files>"`
+         - Proceed as PASS (step 2c)
+      4. If ANY conflict has non-empty base (true modification conflict):
+         - `git merge --abort`
+         - Mark as FAIL with reason = `"merge conflict"`
+         - `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "pending")` — returns task to ready pool
+         - Append failure reason to the story's `notes` field in prd.json: `"Attempt N failed: merge conflict"`
+         - **Clean up worktree and branch** (same as step 2c)
 
 3. **If FAIL** (worker reported FAIL or typecheck failed):
    - **Clean up worktree and branch:**
@@ -367,14 +380,14 @@ Resolve the failed dependencies to continue.
 ## 6. Concurrency Rules
 
 1. **Max subagents per wave** — defaults to 3 (configurable via `max-agents` argument). Values above 5 require user confirmation due to resource usage.
-2. **File overlap soft warning** — before spawning a wave, scan story `notes` for file paths. If two stories mention the same file, log a warning but do not block scheduling. Worktree isolation prevents file corruption but merge conflicts are still possible.
+2. **sharedFiles-aware scheduling** — before spawning a wave, check each story's `sharedFiles` array for overlap with already-selected stories. If two stories share a file, only the first (by priority) is scheduled; the other is deferred to the next wave. This prevents predictable merge conflicts while still allowing maximum parallelism for non-overlapping stories.
 3. **prd.json writes are serialized** — only the dispatcher writes to prd.json, never subagents.
 4. **progress.txt writes are serialized** — only the dispatcher appends to progress.txt.
 5. **Task status updates are dispatcher-only** — subagents never call TaskCreate/TaskUpdate/TaskList. Only the dispatcher manages task lifecycle.
 6. **Git commit isolation** — workers commit in their own isolated worktrees. The dispatcher merges each worker's branch into the feature branch using `git merge --no-ff` after verification (§3.5).
 7. **state.json writes are dispatcher-only** — only the dispatcher writes to `.ralph-in-claude/state.json`, never subagents.
 8. **Merge serialization** — the dispatcher merges worker branches one at a time, never in parallel. This ensures a clean, linear merge sequence.
-9. **Conflict = Fail** — if `git merge --no-ff` encounters conflicts, the dispatcher runs `git merge --abort` and marks the story as failed. On retry, the worker forks from the updated HEAD (which includes previously merged stories), naturally resolving the conflict.
+9. **Conflict auto-resolve** — if `git merge` encounters conflicts, the dispatcher first checks if ALL hunks are append-only (diff3 base section empty). If yes, conflict markers are stripped and the merge is completed automatically. If any hunk has a non-empty base (true modification conflict), `git merge --abort` is run and the story is marked as failed. On retry, the worker forks from the updated HEAD (which includes previously merged stories), naturally resolving the conflict.
 10. **Worker single commit** — each worker must produce exactly one commit in its worktree. This simplifies the merge process and keeps history clean.
 11. **Worktree lifecycle** — the dispatcher cleans up every worktree and its branch after processing (`git worktree remove` + `git branch -D`), regardless of PASS or FAIL. The Task tool does NOT auto-clean worktrees that have commits.
 

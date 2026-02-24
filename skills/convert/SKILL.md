@@ -50,6 +50,7 @@ Converts existing PRDs to the prd.json format that Ralph uses for autonomous exe
         "Typecheck passes"
       ],
       "dependsOn": [],
+      "sharedFiles": [],
       "priority": 1,
       "passes": false,
       "notes": ""
@@ -145,6 +146,7 @@ For stories with testable logic, also include:
 7. **branchName**: Derive from feature name, kebab-case, prefixed with `ralph/`
 8. **Always add**: "Typecheck passes" to every story's acceptance criteria
 9. **dependsOn**: Analyze the PRD for inter-story dependencies. Set `dependsOn` to an array of story IDs that must be completed before this story can start. Root stories (no dependencies) use `[]`. If a story uses a schema added by another story, it depends on that story.
+10. **sharedFiles**: Identify files this story will modify that other stories in the same wave may also modify (e.g., `src/index.ts` for import registration, `src/routes.ts` for route registration). Set to an array of relative file paths, or `[]` if the story only modifies files unique to itself. The dispatcher uses this to avoid scheduling overlapping stories in the same parallel wave.
 
 ---
 
@@ -201,6 +203,7 @@ Add ability to mark tasks with different statuses.
         "Typecheck passes"
       ],
       "dependsOn": [],
+      "sharedFiles": ["prisma/schema.prisma"],
       "priority": 1,
       "passes": false,
       "notes": "Use Prisma enum type. See PRD section 2.1 for status transition rules."
@@ -216,6 +219,7 @@ Add ability to mark tasks with different statuses.
         "Verify in browser"
       ],
       "dependsOn": ["US-001"],
+      "sharedFiles": [],
       "priority": 2,
       "passes": false,
       "notes": ""
@@ -232,6 +236,7 @@ Add ability to mark tasks with different statuses.
         "Verify in browser"
       ],
       "dependsOn": ["US-001"],
+      "sharedFiles": [],
       "priority": 3,
       "passes": false,
       "notes": ""
@@ -247,6 +252,7 @@ Add ability to mark tasks with different statuses.
         "Verify in browser"
       ],
       "dependsOn": ["US-002", "US-003"],
+      "sharedFiles": [],
       "priority": 4,
       "passes": false,
       "notes": ""
@@ -272,3 +278,5 @@ Before writing prd.json, verify:
 - [ ] Every story has a `dependsOn` array (use `[]` for root stories)
 - [ ] `dependsOn` references are valid story IDs within this PRD
 - [ ] `dependsOn` graph has no cycles (forms a valid DAG)
+- [ ] Every story has a `sharedFiles` array (use `[]` if no shared files)
+- [ ] `sharedFiles` entries are relative file paths that other stories may also modify
