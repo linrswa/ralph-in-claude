@@ -332,3 +332,12 @@ Before writing prd.json, verify:
 - [ ] `sharedFiles` entries use object format `{file, conflictType, reason}` with correct classification
 - [ ] `conflictType` is `"append-only"` or `"structural-modify"` per the Conflict Analysis rules
 - [ ] `conflictStrategy` is set at project level if append-only overlaps dominate (recommend `"optimistic"`)
+
+---
+
+## Next Step
+
+After saving prd.json, tell the user:
+
+> prd.json saved. Next step: run `/ralph:run` to start execution.
+> To use more parallel agents, add a number: `/ralph:run .ralph-in-claude/prd.json 8`

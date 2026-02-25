@@ -138,3 +138,11 @@ Before saving the PRD:
 - [ ] Functional requirements are numbered and unambiguous
 - [ ] Non-goals section defines clear boundaries
 - [ ] Saved to `.ralph-in-claude/tasks/prd-[feature-name].md`
+
+---
+
+## Next Step
+
+After saving the PRD, tell the user:
+
+> PRD saved. Next step: run `/ralph:convert` to convert it to prd.json for execution.
