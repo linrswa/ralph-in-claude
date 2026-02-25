@@ -257,7 +257,7 @@ ralph-in-claude/
 │   └── hooks.json                      # 外掛層級 PreToolUse hooks（prd.json 驗證）
 ├── scripts/
 │   ├── ensure-ralph-dir.sh             # Hook：自動建立 .ralph-in-claude/ 目錄
-│   └── validate-prd-write.sh           # Hook：驗證 prd.json schema（6 項檢查）
+│   └── validate-prd-write.sh           # Hook：驗證 prd.json schema（9 項檢查）
 ├── skills/
 │   ├── prd/
 │   │   └── SKILL.md                    # ralph:prd — PRD 產生器

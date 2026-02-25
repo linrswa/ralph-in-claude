@@ -188,7 +188,7 @@ ralph-in-claude/
 │   └── hooks.json                      # Plugin-level PreToolUse hooks (prd.json validation)
 ├── scripts/
 │   ├── ensure-ralph-dir.sh             # Hook: auto-creates .ralph-in-claude/ dir
-│   └── validate-prd-write.sh           # Hook: validates prd.json schema (6 checks)
+│   └── validate-prd-write.sh           # Hook: validates prd.json schema (9 checks)
 ├── skills/
 │   ├── prd/
 │   │   └── SKILL.md                    # ralph:prd — PRD generator

@@ -83,6 +83,24 @@ if [[ -z "$BRANCH" ]]; then
   exit 2
 fi
 
+# 3b. .baseBranch (string, must exist)
+if ! echo "$CONTENT" | jq -e 'has("baseBranch") and (.baseBranch | type == "string")' > /dev/null 2>&1; then
+  echo "prd.json validation FAILED: missing .baseBranch field (must be a string)." >&2
+  exit 2
+fi
+
+# 3c. .sourcePrd (string, must exist)
+if ! echo "$CONTENT" | jq -e 'has("sourcePrd") and (.sourcePrd | type == "string")' > /dev/null 2>&1; then
+  echo "prd.json validation FAILED: missing .sourcePrd field (must be a string)." >&2
+  exit 2
+fi
+
+# 3d. .description (string, must exist)
+if ! echo "$CONTENT" | jq -e 'has("description") and (.description | type == "string")' > /dev/null 2>&1; then
+  echo "prd.json validation FAILED: missing .description field (must be a string)." >&2
+  exit 2
+fi
+
 # 4. .userStories (non-empty array)
 STORY_COUNT=$(echo "$CONTENT" | jq '.userStories | if type == "array" then length else -1 end')
 if [[ "$STORY_COUNT" -le 0 ]]; then
@@ -96,13 +114,15 @@ MISSING=$(echo "$CONTENT" | jq -r '
   select(
     (.value.id | type) != "string" or
     (.value.title | type) != "string" or
+    (.value.description | type) != "string" or
     (.value.acceptanceCriteria | type) != "array" or
     (.value.dependsOn | type) != "array" or
     (.value.sharedFiles | type) != "array" or
     (.value.priority == null) or
-    (.value.passes == null)
+    (.value.passes == null) or
+    (.value.notes | type) != "string"
   ) |
-  "Story at index \(.key): missing required fields (need id, title, acceptanceCriteria, dependsOn, sharedFiles, priority, passes)"
+  "Story at index \(.key): missing required fields (need id, title, description, acceptanceCriteria, dependsOn, sharedFiles, priority, passes, notes)"
 ')
 
 if [[ -n "$MISSING" ]]; then
