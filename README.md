@@ -11,6 +11,10 @@ Packaged as a **Claude Code plugin** with three namespaced skills: `ralph:prd`, 
 
 ## 📰 Recent Updates
 
+**v0.3.6** — PRD output centralized to `.ralph-in-claude/tasks/`; `ralph:convert` auto-detects PRD files from that directory.
+
+**v0.3.5** — Tightened prd.json schema validation.
+
 **v0.3.4** — Default max parallel agents increased from 3 to 5.
 
 **v0.3.2 ~ v0.3.3** — Switched ralph-worker model from Opus to Sonnet for better cost/speed balance.

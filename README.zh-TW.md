@@ -11,6 +11,10 @@
 
 ## 📰 近期更新
 
+**v0.3.6** — PRD 輸出集中至 `.ralph-in-claude/tasks/`；`ralph:convert` 自動偵測該目錄下的 PRD 檔案。
+
+**v0.3.5** — 強化 prd.json schema 驗證。
+
 **v0.3.4** — 預設最大平行代理數從 3 增加至 5。
 
 **v0.3.2 ~ v0.3.3** — Worker 模型從 Opus 切換為 Sonnet，平衡成本與速度。
