@@ -19,41 +19,13 @@ Packaged as a **Claude Code plugin** with three namespaced skills: `ralph:prd`, 
 
 ## 💡 Motivation
 
-The original [Ralph](https://github.com/snarktank/ralph) was built for Amp — an autonomous loop that picks up stories from a PRD and implements them one by one, each in a fresh context to avoid exhaustion. This project started as a Claude Code adaptation of that pattern (a simple bash loop), and is now evolving to leverage Claude Code's native agentic primitives (Task system, Skills, Hooks, plugin marketplace) for **dependency-aware parallel execution** and **schema-validated data integrity**.
+The original [Ralph](https://github.com/snarktank/ralph) was built for Amp — an autonomous loop that picks up stories from a PRD and implements them one by one, each in a fresh context to avoid exhaustion. This project started as a Claude Code adaptation of that pattern (a simple bash loop), and has since evolved to leverage Claude Code's native agentic primitives (Task system, Skills, Hooks, plugin marketplace) for **dependency-aware parallel execution** and **schema-validated data integrity**.
 
 It works today, but there are still rough edges around hook scoping, subagent coordination, and error recovery. Work in progress.
 
 ## 🏛️ Architecture
 
-### Bash Loop (fallback)
-
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│ ralph.sh                                                             │
-│                                                                      │
-│  ┌─ Iteration 1 (fresh Claude instance) ──────────────────────────┐  │
-│  │                                                                │  │
-│  │   prd.json ──→ Pick highest-priority ──→ Implement ──→ Commit  │  │
-│  │                incomplete story          & typecheck           │  │
-│  │                                              │                 │  │
-│  │                                              ▼                 │  │
-│  │                               Set passes: true in prd.json     │  │
-│  │                               Append to progress.txt           │  │
-│  └────────────────────────────────────────────────────────────────┘  │
-│                                  │                                   │
-│                                  ▼                                   │
-│  ┌─ Iteration 2 (fresh Claude instance, same flow) ───────────────┐  │
-│  │  ...                                                           │  │
-│  └────────────────────────────────────────────────────────────────┘  │
-│                                  │                                   │
-│                                  ▼                                   │
-│          All passes=true ──→ EXIT   or   Max iterations ──→ EXIT     │
-└──────────────────────────────────────────────────────────────────────┘
-```
-
-Each iteration is a fresh Claude instance with no shared memory. State persists via `prd.json`, `progress.txt`, and git history.
-
-### Native Plugin (`/ralph:run`)
+### Current: Native Plugin (`/ralph:run`)
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
@@ -101,6 +73,34 @@ Each iteration is a fresh Claude instance with no shared memory. State persists 
 ```
 
 See [docs/plan.md](docs/plan.md) for the full design document.
+
+### Original: Bash Loop (`ralph.sh`)
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ ralph.sh                                                             │
+│                                                                      │
+│  ┌─ Iteration 1 (fresh Claude instance) ──────────────────────────┐  │
+│  │                                                                │  │
+│  │   prd.json ──→ Pick highest-priority ──→ Implement ──→ Commit  │  │
+│  │                incomplete story          & typecheck           │  │
+│  │                                              │                 │  │
+│  │                                              ▼                 │  │
+│  │                               Set passes: true in prd.json     │  │
+│  │                               Append to progress.txt           │  │
+│  └────────────────────────────────────────────────────────────────┘  │
+│                                  │                                   │
+│                                  ▼                                   │
+│  ┌─ Iteration 2 (fresh Claude instance, same flow) ───────────────┐  │
+│  │  ...                                                           │  │
+│  └────────────────────────────────────────────────────────────────┘  │
+│                                  │                                   │
+│                                  ▼                                   │
+│          All passes=true ──→ EXIT   or   Max iterations ──→ EXIT     │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+The original approach: each iteration is a fresh Claude instance with no shared memory. State persists via `prd.json`, `progress.txt`, and git history. Still available as a fallback for CI/headless environments.
 
 ## 📦 Installation
 

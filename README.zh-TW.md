@@ -25,35 +25,7 @@
 
 ## 🏛️ 架構
 
-### Bash Loop：循序迴圈（備用方案）
-
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│ ralph.sh                                                             │
-│                                                                      │
-│  ┌─ Iteration 1 (fresh Claude instance) ──────────────────────────┐  │
-│  │                                                                │  │
-│  │   prd.json ──→ Pick highest-priority ──→ Implement ──→ Commit  │  │
-│  │                incomplete story          & typecheck           │  │
-│  │                                              │                 │  │
-│  │                                              ▼                 │  │
-│  │                               Set passes: true in prd.json     │  │
-│  │                               Append to progress.txt           │  │
-│  └────────────────────────────────────────────────────────────────┘  │
-│                                  │                                   │
-│                                  ▼                                   │
-│  ┌─ Iteration 2 (fresh Claude instance, same flow) ───────────────┐  │
-│  │  ...                                                           │  │
-│  └────────────────────────────────────────────────────────────────┘  │
-│                                  │                                   │
-│                                  ▼                                   │
-│          All passes=true ──→ EXIT   or   Max iterations ──→ EXIT     │
-└──────────────────────────────────────────────────────────────────────┘
-```
-
-每次迭代都是全新的 Claude 實例，沒有共享記憶。狀態透過 `prd.json`、`progress.txt` 和 git 歷史持久化。
-
-### Native Plugin：原生外掛整合（`/ralph:run`）
+### 現行架構：Native Plugin（`/ralph:run`）
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
@@ -101,6 +73,34 @@
 ```
 
 詳見 [docs/plan.md](docs/plan.md) 完整的設計文件。
+
+### 原版架構：Bash Loop（`ralph.sh`）
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ ralph.sh                                                             │
+│                                                                      │
+│  ┌─ Iteration 1 (fresh Claude instance) ──────────────────────────┐  │
+│  │                                                                │  │
+│  │   prd.json ──→ Pick highest-priority ──→ Implement ──→ Commit  │  │
+│  │                incomplete story          & typecheck           │  │
+│  │                                              │                 │  │
+│  │                                              ▼                 │  │
+│  │                               Set passes: true in prd.json     │  │
+│  │                               Append to progress.txt           │  │
+│  └────────────────────────────────────────────────────────────────┘  │
+│                                  │                                   │
+│                                  ▼                                   │
+│  ┌─ Iteration 2 (fresh Claude instance, same flow) ───────────────┐  │
+│  │  ...                                                           │  │
+│  └────────────────────────────────────────────────────────────────┘  │
+│                                  │                                   │
+│                                  ▼                                   │
+│          All passes=true ──→ EXIT   or   Max iterations ──→ EXIT     │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+原版做法：每次迭代都是全新的 Claude 實例，沒有共享記憶。狀態透過 `prd.json`、`progress.txt` 和 git 歷史持久化。仍可作為 CI/無頭環境的備用方案。
 
 ## 📦 安裝
 
