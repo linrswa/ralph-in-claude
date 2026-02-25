@@ -145,12 +145,12 @@
 /ralph:prd [你的功能描述]
 ```
 
-回答釐清問題。輸出儲存至 `tasks/prd-[feature-name].md`。
+回答釐清問題。輸出儲存至 `.ralph-in-claude/tasks/prd-[feature-name].md`。
 
 **2. 轉換為 Ralph 格式**
 
 ```
-/ralph:convert tasks/prd-[feature-name].md
+/ralph:convert .ralph-in-claude/tasks/prd-[feature-name].md
 ```
 
 建立 `.ralph-in-claude/prd.json`，包含結構化的 user story 供自主執行。

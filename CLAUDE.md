@@ -31,7 +31,7 @@ When asked to create a PRD, follow these steps:
    - Technical Considerations
    - Success Metrics
 
-3. Save to `tasks/prd-[feature-name].md`
+3. Save to `.ralph-in-claude/tasks/prd-[feature-name].md`
 
 **User Story Format:**
 ```markdown
@@ -53,7 +53,7 @@ Convert a PRD markdown file to Ralph's JSON format:
   "project": "[Project Name]",
   "branchName": "ralph/[feature-name]",
   "baseBranch": "main",
-  "sourcePrd": "tasks/prd-[feature-name].md",
+  "sourcePrd": ".ralph-in-claude/tasks/prd-[feature-name].md",
   "description": "[Feature description]",
   "userStories": [
     {

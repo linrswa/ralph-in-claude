@@ -145,12 +145,12 @@ This enables `/ralph:prd`, `/ralph:convert`, and `/ralph:run` commands in any pr
 /ralph:prd [your feature description]
 ```
 
-Answer the clarifying questions. Output saves to `tasks/prd-[feature-name].md`.
+Answer the clarifying questions. Output saves to `.ralph-in-claude/tasks/prd-[feature-name].md`.
 
 **2. Convert to Ralph format**
 
 ```
-/ralph:convert tasks/prd-[feature-name].md
+/ralph:convert .ralph-in-claude/tasks/prd-[feature-name].md
 ```
 
 This creates `.ralph-in-claude/prd.json` with user stories structured for autonomous execution.

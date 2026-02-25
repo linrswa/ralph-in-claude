@@ -15,6 +15,6 @@ fi
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 
 # Ensure .ralph-in-claude/ directory exists
-mkdir -p "$PROJECT_DIR/.ralph-in-claude"
+mkdir -p "$PROJECT_DIR/.ralph-in-claude/tasks"
 
 exit 0

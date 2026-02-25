@@ -17,7 +17,12 @@ Converts existing PRDs to the prd.json format that Ralph uses for autonomous exe
 
 ## The Job
 
-1. Take a PRD (markdown file or text)
+1. **Locate the PRD:**
+   - **If an argument was provided** → use that path directly
+   - **If no argument** → scan `.ralph-in-claude/tasks/prd-*.md`:
+     - **0 files found** → tell the user to run `/ralph:prd` first, then stop
+     - **1 file found** → auto-select it and confirm to the user (e.g., "Found `.ralph-in-claude/tasks/prd-foo.md` — using that.")
+     - **2+ files found** → use the `AskUserQuestion` tool with the file list as options so the user can pick one
 2. **Ask the user to confirm the `baseBranch`** using the `AskUserQuestion` tool. Provide options based on:
    - The current git branch (check with `git branch --show-current`)
    - `main` branch
@@ -37,7 +42,7 @@ Converts existing PRDs to the prd.json format that Ralph uses for autonomous exe
   "project": "[Project Name]",
   "branchName": "ralph/[feature-name-kebab-case]",
   "baseBranch": "[base branch to create from, e.g. main or feature-branch]",
-  "sourcePrd": "[path to original PRD file, e.g. docs/prd/feature.md]",
+  "sourcePrd": "[path to original PRD file, e.g. .ralph-in-claude/tasks/prd-feature.md]",
   "description": "[Feature description from PRD title/intro]",
   "conflictStrategy": "optimistic",
   "userStories": [
