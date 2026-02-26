@@ -11,6 +11,10 @@ Packaged as a **Claude Code plugin** with three namespaced skills: `ralph:prd`, 
 
 ## 📰 Recent Updates
 
+**v0.4.0** — Post-wave code review system (Sonnet wave-reviewer + Opus wave-coordinator for escalation); dispatcher-managed worktrees fix HEAD inheritance across waves; orphan worktree cleanup at startup.
+
+**v0.3.7** — Next-step prompts in `ralph:prd` and `ralph:convert` skills guide users through the workflow.
+
 **v0.3.6** — PRD output centralized to `.ralph-in-claude/tasks/`; `ralph:convert` auto-detects PRD files from that directory.
 
 **v0.3.5** — Tightened prd.json schema validation.
@@ -195,6 +199,8 @@ ralph-in-claude/
 │   └── plugin.json                     # Plugin manifest
 ├── agents/
 │   ├── ralph-worker.md                 # Worker agent definition (shipped with plugin)
+│   ├── wave-reviewer.md                # Sonnet agent — post-wave consistency review
+│   ├── wave-coordinator.md             # Opus agent — escalated wave issue resolution
 │   └── conflict-resolver.md            # Conflict resolution agent (experimental, untested)
 ├── hooks/
 │   └── hooks.json                      # Plugin-level PreToolUse hooks (prd.json validation)
@@ -210,7 +216,9 @@ ralph-in-claude/
 │       ├── SKILL.md                    # ralph:run — parallel dispatcher
 │       └── references/
 │           ├── subagent-prompt-template.md  # Worker prompt (dynamic context only)
-│           └── conflict-resolver-prompt-template.md  # Conflict resolver prompt (experimental)
+│           ├── wave-review-prompt-template.md       # Wave reviewer prompt
+│           ├── wave-coordinator-prompt-template.md  # Wave coordinator prompt
+│           └── conflict-resolver-prompt-template.md # Conflict resolver prompt (experimental)
 ├── docs/
 │   ├── plan.md                         # Native Plugin design document
 │   └── WIP.md                          # Open issues & backlog
@@ -287,6 +295,7 @@ The project-level `conflictStrategy` controls how the dispatcher handles overlap
 ### Quality Gates
 
 - **Dispatcher:** typecheck after each wave, `git merge --no-ff` per worker branch, retries failed stories up to 3 times
+- **Wave review:** after each multi-story wave, a Sonnet wave-reviewer checks the combined diff for cross-cutting consistency issues (naming, imports, style). Major issues are escalated to an Opus wave-coordinator that can fix them or create remediation stories.
 - **Hooks:** validates prd.json schema on every Write/Edit (JSON integrity, required fields, `dependsOn` referential check)
 
 ## 🐛 Debugging
