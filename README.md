@@ -47,7 +47,10 @@ It works today, but there are still rough edges around hook scoping, subagent co
 │  │   US-006 (needs US-003, US-004) ── Wave 3                          │   │
 │  └────────────────────────────────────────────────────────────────────┘   │
 │                                                                           │
-│  ┌─ 2. Wave Execution (up to 5 workers in parallel) ───────────────────┐  │
+│  ┌─ 2. Wave Execution ────────────────────────────────────────────────┐  │
+│  │                                                                     │  │
+│  │   Single-story wave → Direct mode (commit on feature branch)        │  │
+│  │   Multi-story wave  → Worktree mode (dispatcher-managed worktrees)  │  │
 │  │                                                                     │  │
 │  │   ┌─ Worktree A ─────┐  ┌─ Worktree B ─────┐  ┌─ Worktree C ─────┐  │  │
 │  │   │  ralph-worker    │  │  ralph-worker    │  │  ralph-worker    │  │  │
@@ -58,7 +61,7 @@ It works today, but there are still rough edges around hook scoping, subagent co
 │  │   └───────┬──────────┘  └───────┬──────────┘  └───────┬──────────┘  │  │
 │  │           └─────────────────────┼─────────────────────┘             │  │
 │  │                                 ▼                                   │  │
-│  │   ┌─ 3. Merge Pipeline ────────────────────────────────────────┐    │  │
+│  │   ┌─ 3. Merge Pipeline (worktree mode) ───────────────────────┐    │  │
 │  │   │  Tier 1: git merge --no-ff (clean merge)                   │    │  │
 │  │   │  Tier 2: append-only auto-resolve                          │    │  │
 │  │   │  Tier 3: conflict-resolver agent *                         │    │  │
@@ -169,7 +172,12 @@ This creates `.ralph-in-claude/prd.json` with user stories structured for autono
 /ralph:run .ralph-in-claude/prd.json 8  # custom prd path + max 8 parallel agents
 ```
 
-The dispatcher reads `.ralph-in-claude/prd.json`, builds a dependency DAG, and spawns subagent workers in parallel waves (default 5 per wave, configurable via the second argument). Each worker runs in an isolated git worktree, commits its changes independently, and reports back. The dispatcher verifies results, merges each worker's branch via `git merge --no-ff`, updates prd.json, and spawns the next wave.
+The dispatcher reads `.ralph-in-claude/prd.json`, builds a dependency DAG, and spawns subagent workers in parallel waves (default 5 per wave, configurable via the second argument). Two execution modes are used:
+
+- **Direct mode** (single-story wave): the worker commits directly on the feature branch — no worktree or merge needed.
+- **Worktree mode** (multi-story wave): the dispatcher creates git worktrees from the feature branch HEAD, ensuring each wave sees all previous waves' merged changes. Workers commit in their worktrees, then the dispatcher merges via `git merge --no-ff`.
+
+The dispatcher verifies results, updates prd.json, and spawns the next wave.
 
 **Bash Loop (fallback) — sequential execution:**
 

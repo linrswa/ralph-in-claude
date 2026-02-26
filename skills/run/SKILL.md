@@ -44,9 +44,24 @@ Options:
 5. **Check git branch** — ensure you're on the branch specified by `branchName`. If not:
    - If the branch exists: `git checkout <branchName>`
    - If not: `git checkout -b <branchName>` from `baseBranch` (default: `main`)
-6. **Initialize internal tracking** — create a mapping:
+6. **Clean up orphan worktrees** — scan `.ralph-in-claude/worktrees/` for leftover worktrees from crashed previous runs:
+   ```bash
+   # List and remove any existing worktrees under .ralph-in-claude/worktrees/
+   if [ -d ".ralph-in-claude/worktrees" ]; then
+     for wt in .ralph-in-claude/worktrees/*/; do
+       git worktree remove --force "$wt" 2>/dev/null
+     done
+   fi
+   # Prune stale worktree references
+   git worktree prune
+   ```
+   Also delete any leftover `ralph-worker-*` branches:
+   ```bash
+   git branch --list 'ralph-worker-*' | xargs -r git branch -D
+   ```
+7. **Initialize internal tracking** — create a mapping:
    - `storyIdToTaskId` — maps story IDs (e.g., `"US-001"`) to TaskCreate-returned task IDs
-7. **Write initial `.ralph-in-claude/state.json`** with the following content:
+8. **Write initial `.ralph-in-claude/state.json`** with the following content:
    ```json
    {
      "status": "running",
@@ -169,7 +184,38 @@ From ready stories:
    - Log parallel allowances: `"Allowing <STORY_ID> parallel with <OTHER_ID>: both append-only on <file>"`
 4. Take up to **max-agents** stories for this wave (default 5, or the value confirmed in step 0)
 
-### 3.3 Generate Worker Prompts
+### 3.3 Determine Wave Mode + Generate Worker Prompts
+
+**Determine the wave mode** based on wave size:
+- **1 story in wave → Direct mode:** worker commits directly on the feature branch (no worktree needed)
+- **2+ stories in wave → Worktree mode:** each worker gets a dispatcher-managed worktree
+
+**For worktree mode**, create worktrees **before** generating prompts:
+```bash
+# For each story in the wave:
+git worktree add .ralph-in-claude/worktrees/<STORY_ID> -b ralph-worker-<STORY_ID> HEAD
+```
+
+Track each story's dispatch info in memory:
+```
+{storyId, mode: "direct"|"worktree", branch: "ralph-worker-<STORY_ID>"|null, worktreePath: "<absolute-path>"|null}
+```
+
+**Generate the `{{WORKING_DIRECTORY_INSTRUCTIONS}}` placeholder** for each story:
+
+- **Direct mode:**
+  ```markdown
+  - **Working directory:** You are working directly on the feature branch. No need to change directories.
+  ```
+
+- **Worktree mode:**
+  ```markdown
+  - **Working directory:** You are working in a dispatcher-managed worktree. **As your FIRST action**, run:
+    ```bash
+    cd <absolute-worktree-path>
+    ```
+    All subsequent commands must run from this directory. Do NOT create branches or switch branches.
+  ```
 
 For each story in the wave:
 
@@ -181,6 +227,7 @@ For each story in the wave:
    - `{{ACCEPTANCE_CRITERIA}}` → format as a markdown checklist from `acceptanceCriteria` array
    - `{{STORY_NOTES}}` → story `notes` (or "None" if empty)
    - `{{PROJECT_NAME}}` → prd.json `project`
+   - `{{WORKING_DIRECTORY_INSTRUCTIONS}}` → generated working directory instructions (see above)
    - `{{SOURCE_PRD}}` → prd.json `sourcePrd`
    - `{{CODEBASE_PATTERNS}}` → extracted from progress.txt, or "None yet"
    - `{{COMPLETED_STORIES}}` → list of completed story IDs and titles, or "None yet"
@@ -198,7 +245,9 @@ For each story in the wave:
       "storyId": "<story.id>",
       "storyTitle": "<story.title>",
       "status": "running",
-      "worktreeBranch": null,
+      "mode": "direct" | "worktree",
+      "worktreeBranch": "<ralph-worker-STORY_ID>" | null,
+      "worktreePath": "<absolute-path>" | null,
       "startedAt": "<current timestamp>",
       "completedAt": null,
       "retryCount": <retry count from notes>
@@ -213,7 +262,7 @@ For each story in the wave:
 Then, in a **single message**, issue both the status updates and spawn calls in parallel:
 
 1. `TaskUpdate(taskId, status: "in_progress")` for each selected story
-2. `Task(subagent_type: "ralph:ralph-worker", isolation: "worktree", ...)` for each selected story
+2. `Task(subagent_type: "ralph:ralph-worker", ...)` for each selected story — **without `isolation: "worktree"`**
 
 ```
 For each story in wave:
@@ -224,16 +273,25 @@ For each story in wave:
   Task(
     subagent_type: "ralph:ralph-worker",
     description: "<story.id> - <story.title>",
-    prompt: <generated prompt from template>,
-    isolation: "worktree"
+    prompt: <generated prompt from template>
   )
 ```
 
 **CRITICAL:** All TaskUpdate and Task calls for a wave MUST be in the same message to enable parallel execution.
 
+**NOTE:** Workers are spawned **without** `isolation: "worktree"`. In worktree mode, the dispatcher pre-creates worktrees (§3.3) and the worker prompt instructs the agent to `cd` into the worktree as its first action. In direct mode, the worker operates on the feature branch directly.
+
 ### 3.5 Verify Results & Merge (Four-Tier Pipeline)
 
-When all subagents in the wave return, process each story **sequentially** (one at a time, to serialize merges):
+**Before processing stories, capture the current HEAD as the wave-start commit:**
+```bash
+WAVE_START_COMMIT=$(git rev-parse HEAD)
+```
+This is used later in §3.5.1 to compute the combined wave diff.
+
+When all subagents in the wave return, process each story **sequentially** (one at a time, to serialize merges).
+
+**Look up each story's dispatch info** from the tracking created in §3.3: `{storyId, mode, branch, worktreePath}`.
 
 For each completed worker:
 
@@ -252,11 +310,18 @@ For each completed worker:
       ```
       If the project has no typecheck tooling, skip this step — it counts as passed.
 
-   b. **Merge the worker's branch** into the feature branch:
+   b. **Merge the worker's branch** (mode-dependent):
+
+      **Direct mode:** Skip merge — the commit is already on the feature branch. Verify the commit hash from the worker report matches the current HEAD:
+      ```bash
+      git log -1 --format=%H  # should match the reported commit hash
+      ```
+
+      **Worktree mode:** Merge the worker's branch into the feature branch:
       ```bash
       git -c merge.conflictStyle=diff3 merge --no-ff <worker-branch> -m "feat: <STORY_ID> - <STORY_TITLE>"
       ```
-      The `<worker-branch>` is returned by the Task tool in its result when `isolation: "worktree"` is used.
+      The `<worker-branch>` is `ralph-worker-<STORY_ID>` from the dispatcher's tracking (§3.3).
 
    c. **Tier 1 — Clean merge (no conflicts):**
       - `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "completed")` — this auto-unblocks dependent tasks
@@ -269,14 +334,16 @@ For each completed worker:
         - Learnings: <from subagent report>
         ---
         ```
-      - **Clean up worktree and branch:**
+      - **Clean up worktree and branch** (worktree mode only):
         ```bash
-        git worktree remove <worktree-path>
+        git worktree remove --force <worktree-path>
         git branch -D <worker-branch>
         ```
-        Both `<worktree-path>` and `<worker-branch>` are returned by the Task tool result.
+        Both `<worktree-path>` and `<worker-branch>` come from the dispatcher's tracking (§3.3). In direct mode, skip this step.
 
-   d. **Tier 2 — Append-only auto-resolve:**
+   **Note:** Tiers 2–4 below only apply in **worktree mode**. In **direct mode**, there is no merge step, so merge conflicts cannot occur. If the direct-mode worker's commit fails typecheck, treat it as a FAIL: `git reset --hard HEAD~1` to undo the worker's commit, then proceed to the FAIL handler (step 3).
+
+   d. **Tier 2 — Append-only auto-resolve** (worktree mode only)**:**
       If merge conflicts occur, check if they are append-only:
       1. List conflicted files: `git diff --name-only --diff-filter=U`
       2. For each conflicted file, check if ALL conflict hunks are append-only:
@@ -329,14 +396,14 @@ For each completed worker:
          - `git merge --abort` (or `git reset --hard HEAD` if the resolver already committed)
          - Fall through to Tier 4
 
-   f. **Tier 4 — Remediation or FAIL:**
+   f. **Tier 4 — Remediation or FAIL** (worktree mode only)**:**
       If all previous tiers failed:
       1. **If `conflictStrategy` is `"conservative"` OR Tier 3 was skipped:**
          - `git merge --abort` (if not already aborted)
          - Mark as FAIL with reason = `"merge conflict"`
          - `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "pending")` — returns task to ready pool
          - Append failure reason to the story's `notes` field in prd.json: `"Attempt N failed: merge conflict"`
-         - **Clean up worktree and branch** (same as step 2c)
+         - **Clean up worktree and branch** (same as step 2c — worktree mode only)
       2. **If `conflictStrategy` is `"optimistic"` AND the story's `remediationDepth` (default 0) is less than 2:**
          - `git merge --abort` (if not already aborted)
          - Create a remediation story in prd.json:
@@ -361,17 +428,21 @@ For each completed worker:
            ```
          - Mark the original story as pending with note: `"Attempt N: merge conflict, remediation <US-REM-NNN> created"`
          - `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "pending")`
-         - **Clean up worktree and branch** (same as step 2c)
+         - **Clean up worktree and branch** (same as step 2c — worktree mode only)
          - When the remediation story later passes and merges, the dispatcher also marks the original story as passed (check remediation notes for the original story ID)
       3. **Otherwise (remediationDepth >= 2):**
          - Same as conservative FAIL (step f.1)
          - Log: `"Remediation depth limit reached for <STORY_ID>"`
 
 3. **If FAIL** (worker reported FAIL or typecheck failed):
-   - **Clean up worktree and branch:**
+   - **Worktree mode — clean up worktree and branch:**
      ```bash
-     git worktree remove <worktree-path>
+     git worktree remove --force <worktree-path>
      git branch -D <worker-branch>
+     ```
+   - **Direct mode — reset dirty state** (if the worker left uncommitted changes):
+     ```bash
+     git checkout -- . && git clean -fd
      ```
    - `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "pending")` — returns task to ready pool
    - Append failure reason to the story's `notes` field in prd.json with the format `"Attempt N failed: <reason>"` (where N is the attempt number). This serves as the persistent retry counter — section 3.1 counts these entries to determine retry count.
@@ -392,7 +463,79 @@ For each completed worker:
   ```
 - Update `lastUpdated` to the current timestamp
 
-### 3.6 Loop
+### 3.5.1 Wave Review (Post-Merge Consistency Check)
+
+**Skip this section if:**
+- The wave had fewer than 2 stories that passed (nothing to cross-check)
+- All stories in the wave were in direct mode (no parallel changes)
+
+**Steps:**
+
+1. **Compute combined wave diff:**
+   ```bash
+   git diff $WAVE_START_COMMIT..HEAD
+   ```
+
+2. **Collect passed stories context** — for each story that passed in this wave, gather: id, title, description, acceptance criteria, files changed (from the worker report).
+
+3. **Generate wave review prompt** from `references/wave-review-prompt-template.md` — substitute placeholders:
+   - `{{WAVE_NUMBER}}` → current wave number
+   - `{{PROJECT_NAME}}` → prd.json `project`
+   - `{{SOURCE_PRD}}` → prd.json `sourcePrd`
+   - `{{PASSED_STORIES}}` → formatted list of passed stories (id, title, description, files changed)
+   - `{{WAVE_DIFF}}` → output of `git diff $WAVE_START_COMMIT..HEAD`
+   - `{{CODEBASE_PATTERNS}}` → extracted from progress.txt, or "None yet"
+
+4. **Spawn Sonnet wave-reviewer:**
+   ```
+   Task(
+     subagent_type: "ralph:wave-reviewer",
+     description: "Review wave <N> consistency",
+     prompt: <generated prompt>
+   )
+   ```
+
+5. **Parse reviewer report** (Status: CLEAN / FIXED / ESCALATE):
+
+   a. **CLEAN** — no issues found. Log and continue to §3.7.
+
+   b. **FIXED** — reviewer committed fixes.
+      - Run typecheck (same detection as §3.5 step 2a).
+      - If pass: log fixes, append to `.ralph-in-claude/progress.txt`:
+        ```
+        ## <TIMESTAMP> - Wave <N> Review
+        - Status: FIXED
+        - Issues fixed: <list from reviewer report>
+        ---
+        ```
+        Continue to §3.7.
+      - If fail: `git reset --hard HEAD~1`, treat as ESCALATE (fall through to step 5c).
+
+   c. **ESCALATE** — issues too complex for Sonnet.
+      - Generate coordinator prompt from `references/wave-coordinator-prompt-template.md` — substitute placeholders:
+        - `{{REVIEWER_REPORT}}` → the complete escalation report from the wave reviewer
+        - `{{WAVE_NUMBER}}`, `{{PROJECT_NAME}}`, `{{SOURCE_PRD}}` → same as above
+        - `{{PASSED_STORIES}}`, `{{WAVE_DIFF}}`, `{{CODEBASE_PATTERNS}}` → same as above
+      - Spawn Opus wave-coordinator:
+        ```
+        Task(
+          subagent_type: "ralph:wave-coordinator",
+          description: "Coordinate wave <N> issues",
+          prompt: <generated prompt>
+        )
+        ```
+      - Parse coordinator report (Status: FIXED / REMEDIATION):
+        - **FIXED:** run typecheck. If pass: log and continue to §3.7. If fail: `git reset --hard HEAD~1`, create remediation stories (treat as REMEDIATION).
+        - **REMEDIATION:** dispatcher creates `US-REM-NNN` stories in prd.json (same format as Tier 4 remediation, `dependsOn` the current wave's passed stories). Create corresponding tasks with `TaskCreate` and wire dependencies.
+
+6. **Append wave review outcome to progress.txt:**
+   ```
+   ## <TIMESTAMP> - Wave <N> Review
+   - Status: CLEAN|FIXED|ESCALATED — <summary>
+   ---
+   ```
+
+### 3.7 Loop
 
 After processing all results from a wave:
 1. Re-read `.ralph-in-claude/prd.json` (it may have been updated)
@@ -477,17 +620,19 @@ Resolve the failed dependencies to continue.
 2. **prd.json writes are serialized** — only the dispatcher writes to prd.json, never subagents.
 3. **progress.txt writes are serialized** — only the dispatcher appends to progress.txt.
 4. **Task status updates are dispatcher-only** — subagents never call TaskCreate/TaskUpdate/TaskList. Only the dispatcher manages task lifecycle.
-5. **Git commit isolation** — workers commit in their own isolated worktrees. The dispatcher merges each worker's branch into the feature branch using `git merge --no-ff` after verification (§3.5).
+5. **Git commit isolation (two modes)** — **Direct mode** (single-story wave): the worker commits directly on the feature branch, no merge needed. **Worktree mode** (multi-story wave): the dispatcher pre-creates worktrees from HEAD of the feature branch, workers `cd` into them and commit, then the dispatcher merges each worker's branch via `git merge --no-ff` (§3.5). Workers are never spawned with `isolation: "worktree"` — the dispatcher manages all worktree lifecycle.
 6. **state.json writes are dispatcher-only** — only the dispatcher writes to `.ralph-in-claude/state.json`, never subagents.
 7. **Merge serialization** — the dispatcher merges worker branches one at a time, never in parallel. This ensures a clean, linear merge sequence.
 8. **Worker single commit** — each worker must produce exactly one commit in its worktree. This simplifies the merge process and keeps history clean.
-9. **Worktree lifecycle** — the dispatcher cleans up every worktree and its branch after processing (`git worktree remove` + `git branch -D`), regardless of PASS or FAIL. The Task tool does NOT auto-clean worktrees that have commits.
+9. **Worktree lifecycle** — in worktree mode, the dispatcher creates worktrees before spawning (`git worktree add`) and cleans up every worktree and its branch after processing (`git worktree remove` + `git branch -D`), regardless of PASS or FAIL. At startup, the dispatcher also removes orphan worktrees from `.ralph-in-claude/worktrees/` left by crashed runs (§1 step 6).
 10. **Conflict-aware scheduling** — scheduling behavior depends on `conflictStrategy`:
     - **Conservative (default):** any `sharedFiles` overlap between two stories defers the later story to the next wave. This is the safest option.
     - **Optimistic:** only defers stories when EITHER side declares `structural-modify` for the overlapping file. If BOTH sides declare `append-only`, they run in parallel. This maximizes parallelism for barrel files, registries, and config files where stories add independent content.
 11. **Four-tier merge pipeline** — merge conflicts are resolved through escalating tiers: (1) clean merge, (2) append-only auto-resolve, (3) conflict resolver agent (optimistic mode only), (4) remediation story or FAIL. Each tier is attempted in order; falling through triggers the next.
 12. **Conflict resolver serialization** — the conflict resolver agent runs one at a time, blocking the merge pipeline. It operates in the main working tree (NOT a worktree) because it must resolve the active merge state where `MERGE_HEAD` exists. No other merges or spawns occur while a resolver is active.
 13. **Remediation depth cap** — auto-generated remediation stories have a `remediationDepth` field capped at 2. This prevents infinite remediation chains. If depth >= 2, the story falls through to FAIL.
+14. **Wave reviewer serialization** — the wave reviewer runs once per wave, after all merges and state updates are complete (§3.5.1). Only one wave reviewer runs at a time. It must finish before the next wave begins.
+15. **Wave coordinator serialization** — the wave coordinator runs only if the wave reviewer escalates. Only one coordinator runs at a time. It must finish before the next wave begins.
 
 ---
 
@@ -500,3 +645,4 @@ Resolve the failed dependencies to continue.
 - **Keep the user informed** — report progress after each wave completes.
 - **Task system is ephemeral** — tasks created with TaskCreate don't survive across sessions. prd.json remains the persistent source of truth for story status. Tasks provide real-time visibility and dependency tracking within a session only.
 - **Update state.json at wave boundaries** — write before spawning (workers = `"running"`) and after verification (workers = `"completed"` / `"failed"`). This keeps the WebGUI Kanban board in sync with actual execution state.
+- **Wave review** — runs after each multi-story wave's merges (§3.5.1). Sonnet reviews the combined diff for cross-cutting consistency issues. Minor issues (naming, imports, style) are fixed directly. Major issues (structural, design) are escalated to the Opus coordinator, which can fix them or create remediation stories.

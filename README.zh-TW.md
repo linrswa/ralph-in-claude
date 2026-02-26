@@ -47,7 +47,10 @@
 │  │   US-006 (needs US-003, US-004) ── Wave 3                          │   │
 │  └────────────────────────────────────────────────────────────────────┘   │
 │                                                                           │
-│  ┌─ 2. Wave Execution (up to 5 workers in parallel) ───────────────────┐  │
+│  ┌─ 2. Wave Execution ────────────────────────────────────────────────┐  │
+│  │                                                                     │  │
+│  │   Single-story wave → Direct mode (commit on feature branch)        │  │
+│  │   Multi-story wave  → Worktree mode (dispatcher-managed worktrees)  │  │
 │  │                                                                     │  │
 │  │   ┌─ Worktree A ─────┐  ┌─ Worktree B ─────┐  ┌─ Worktree C ─────┐  │  │
 │  │   │  ralph-worker    │  │  ralph-worker    │  │  ralph-worker    │  │  │
@@ -58,7 +61,7 @@
 │  │   └───────┬──────────┘  └───────┬──────────┘  └───────┬──────────┘  │  │
 │  │           └─────────────────────┼─────────────────────┘             │  │
 │  │                                 ▼                                   │  │
-│  │   ┌─ 3. Merge Pipeline ────────────────────────────────────────┐    │  │
+│  │   ┌─ 3. Merge Pipeline (worktree mode) ───────────────────────┐    │  │
 │  │   │  Tier 1: git merge --no-ff (clean merge)                   │    │  │
 │  │   │  Tier 2: append-only auto-resolve                          │    │  │
 │  │   │  Tier 3: conflict-resolver agent *                         │    │  │
@@ -169,7 +172,12 @@
 /ralph:run .ralph-in-claude/prd.json 8     # 自訂路徑 + 最多 8 個平行代理
 ```
 
-調度器讀取 `.ralph-in-claude/prd.json`，建立依賴 DAG，以波次方式平行啟動子代理 worker（預設每波 5 個，可透過第二個參數設定）。每個 worker 在獨立的 git worktree 中運行，獨立提交變更後回報結果。調度器驗證結果、透過 `git merge --no-ff` 逐一合併 worker 分支、更新 prd.json，然後啟動下一波。
+調度器讀取 `.ralph-in-claude/prd.json`，建立依賴 DAG，以波次方式平行啟動子代理 worker（預設每波 5 個，可透過第二個參數設定）。依波次大小使用兩種執行模式：
+
+- **Direct mode**（單 story 波次）：worker 直接在 feature branch 上提交——不需要 worktree 或合併。
+- **Worktree mode**（多 story 波次）：調度器從 feature branch HEAD 建立 git worktree，確保每波都能看到前一波已合併的變更。Worker 在各自的 worktree 中提交，調度器再透過 `git merge --no-ff` 合併。
+
+調度器驗證結果、更新 prd.json，然後啟動下一波。
 
 **Bash Loop（備用）— 循序執行：**
 

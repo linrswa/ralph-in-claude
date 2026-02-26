@@ -13,7 +13,8 @@ Ralph is an autonomous AI agent loop that iteratively implements features from a
 3. Run `./ralph.sh` to start the autonomous loop
 4. Ralph picks the highest-priority incomplete story
 5. Implements it, runs quality checks, commits
-6. Repeats until all stories pass
+6. After each multi-story wave, runs a wave review to catch cross-cutting consistency issues
+7. Repeats until all stories pass
 
 ## Commands
 
@@ -90,6 +91,8 @@ Convert a PRD markdown file to Ralph's JSON format:
 | `scripts/` | Shared hook scripts (ensure-ralph-dir, validate-prd-write) |
 | `skills/run/SKILL.md` | `ralph:run` — parallel story dispatcher |
 | `skills/run/references/subagent-prompt-template.md` | Worker prompt template with placeholders |
+| `agents/wave-reviewer.md` | Sonnet agent — post-wave consistency review |
+| `agents/wave-coordinator.md` | Opus agent — escalated wave issue resolution |
 | `ralph.sh` | Bash Loop fallback — spawns Claude iterations |
 | `prompt.md` | Bash Loop instructions given to each Claude iteration |
 | `prd.json` | Current PRD with story status tracking |
@@ -131,9 +134,11 @@ Use the `/ralph:run` skill to orchestrate parallel story execution:
 
 How it works:
 1. Reads prd.json and builds a dependency DAG from `dependsOn` fields
-2. Spawns up to N subagent workers in parallel per wave, each in an isolated git worktree
-3. Workers implement stories, run quality checks, and commit in their worktree
-4. Dispatcher verifies results, merges each worker's branch via `git merge --no-ff`, updates prd.json, and spawns next wave
+2. Spawns up to N subagent workers in parallel per wave using two modes:
+   - **Direct mode** (single-story wave): worker commits directly on the feature branch
+   - **Worktree mode** (multi-story wave): dispatcher creates worktrees from feature branch HEAD, workers `cd` into them
+3. Workers implement stories, run quality checks, and commit
+4. Dispatcher verifies results, merges worker branches (worktree mode) or validates commit (direct mode), updates prd.json, and spawns next wave
 5. Repeats until all stories pass or all are blocked/failed
 
 ### Bash Loop: `ralph.sh` (Fallback)

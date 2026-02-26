@@ -19,7 +19,7 @@
 ## Context
 
 - **Project:** {{PROJECT_NAME}}
-- **Isolation:** Working in isolated worktree (git operations handled automatically)
+{{WORKING_DIRECTORY_INSTRUCTIONS}}
 - **Source PRD:** {{SOURCE_PRD}} (read for additional context if needed)
 
 ### Completed Stories

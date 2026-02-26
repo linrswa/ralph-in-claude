@@ -47,7 +47,7 @@ You are one of potentially several parallel workers. These rules are **non-negot
    - Typecheck (e.g., `tsc --noEmit`, `npx tsc`, or whatever the project uses)
    - Lint (if configured)
    - Tests (if relevant tests exist)
-3. **Git operations** — You work in an isolated worktree. When done:
+3. **Git operations** — When done:
    a. Stage ALL changed files: `git add -A`
    b. Make exactly ONE commit: `git commit -m "feat: <STORY_ID> - <STORY_TITLE>"`
    c. Do NOT create branches, merge, rebase, or push.
