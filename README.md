@@ -11,7 +11,7 @@ Packaged as a **Claude Code plugin** with three namespaced skills: `ralph:prd`, 
 
 ## 📰 Recent Updates
 
-**v0.4.0** — Post-wave code review system (Sonnet wave-reviewer + Opus wave-coordinator for escalation); dispatcher-managed worktrees fix HEAD inheritance across waves; orphan worktree cleanup at startup.
+**v0.4.0** — Post-wave code review system (Sonnet wave-reviewer + Opus wave-coordinator for escalation); switched from Task tool's `isolation: "worktree"` to dispatcher-managed worktrees — the platform's worktree isolation creates from stale refs, so Wave N+1 workers couldn't see Wave N's merged changes, wasting ~80K tokens on redundant re-implementation per multi-wave run; orphan worktree cleanup at startup.
 
 **v0.3.7** — Next-step prompts in `ralph:prd` and `ralph:convert` skills guide users through the workflow.
 

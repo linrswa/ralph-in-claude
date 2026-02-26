@@ -11,7 +11,7 @@
 
 ## 📰 近期更新
 
-**v0.4.0** — 波次後 code review 系統（Sonnet wave-reviewer + Opus wave-coordinator 升級處理）；調度器管理 worktree 修正跨波次 HEAD 繼承問題；啟動時自動清理孤立 worktree。
+**v0.4.0** — 波次後 code review 系統（Sonnet wave-reviewer + Opus wave-coordinator 升級處理）；從 Task tool 的 `isolation: "worktree"` 改為調度器自行管理 worktree——平台的 worktree 隔離只能從 stale ref 建立，導致 Wave N+1 的 worker 看不到 Wave N 已合併的變更，每次多波執行浪費約 80K token 重新實作；啟動時自動清理孤立 worktree。
 
 **v0.3.7** — `ralph:prd` 和 `ralph:convert` 技能新增下一步提示，引導使用者完成工作流程。
 
