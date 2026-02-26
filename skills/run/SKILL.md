@@ -358,43 +358,24 @@ For each completed worker:
          - Proceed as Tier 1 PASS (step 2c)
       4. If ANY conflict has non-empty base → fall through to Tier 3
 
-   e. **Tier 3 — Remediation or FAIL** (worktree mode only)**:**
+   e. **Tier 3 — Defer to wave review** (worktree mode only)**:**
       If all previous tiers failed:
-      1. **If `conflictStrategy` is `"conservative"`:**
-         - `git merge --abort` (if not already aborted)
-         - Mark as FAIL with reason = `"merge conflict"`
-         - `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "pending")` — returns task to ready pool
-         - Append failure reason to the story's `notes` field in prd.json: `"Attempt N failed: merge conflict"`
-         - **Clean up worktree and branch** (same as step 2c — worktree mode only)
-      2. **If `conflictStrategy` is `"optimistic"` AND the story's `remediationDepth` (default 0) is less than 2:**
-         - `git merge --abort` (if not already aborted)
-         - Create a remediation story in prd.json:
-           ```json
-           {
-             "id": "US-REM-<NNN>",
-             "title": "Remediate merge conflict: <STORY_ID> vs <MERGED_STORY_ID>",
-             "description": "Resolve merge conflict between <STORY_ID> and <MERGED_STORY_ID> on files: <conflicted-files>",
-             "acceptanceCriteria": [
-               "All conflicted files are resolved",
-               "Both stories' functionality is preserved",
-               "Typecheck passes"
-             ],
-             "dependsOn": ["<MERGED_STORY_ID>"],
-             "sharedFiles": [],
-             "priority": <current story priority>,
-             "passes": false,
-             "isRemediation": true,
-             "remediationDepth": <current story's remediationDepth + 1>,
-             "notes": "Conflict context: <STORY_ID> (<STORY_TITLE>) conflicts with <MERGED_STORY_ID> (<MERGED_STORY_TITLE>) on <conflicted-files>. The failed story's changes need to be re-applied on top of the merged story."
-           }
-           ```
-         - Mark the original story as pending with note: `"Attempt N: merge conflict, remediation <US-REM-NNN> created"`
-         - `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "pending")`
-         - **Clean up worktree and branch** (same as step 2c — worktree mode only)
-         - When the remediation story later passes and merges, the dispatcher also marks the original story as passed (check remediation notes for the original story ID)
-      3. **Otherwise (remediationDepth >= 2):**
-         - Same as conservative FAIL (step e.1)
-         - Log: `"Remediation depth limit reached for <STORY_ID>"`
+      1. `git merge --abort`
+      2. **Do NOT delete the worktree or branch** — they are needed for the re-merge attempt during wave review (Phase A).
+      3. Track deferred story info in memory (alongside passed/failed lists for this wave):
+         ```
+         deferredStories.push({
+           storyId: "<STORY_ID>",
+           storyTitle: "<STORY_TITLE>",
+           branch: "ralph-worker-<STORY_ID>",
+           worktreePath: "<absolute-worktree-path>",
+           conflictedFiles: [<list from git diff --name-only --diff-filter=U>],
+           reason: "merge conflict"
+         })
+         ```
+      4. Log: `"Deferring <STORY_ID> to wave review: merge conflict on <conflicted-files>"`
+      5. **Do NOT update task status** — the story stays `in_progress` until wave review resolves or fails it.
+      6. Continue processing remaining stories in the wave.
 
 3. **If FAIL** (worker reported FAIL or typecheck failed):
    - **Worktree mode — clean up worktree and branch:**
@@ -425,20 +406,162 @@ For each completed worker:
   ```
 - Update `lastUpdated` to the current timestamp
 
-### 3.5.1 Wave Review (Post-Merge Consistency Check)
+### 3.5.1 Wave Review (Conflict Resolution + Consistency Check)
 
-**Skip this section if:**
-- The wave had fewer than 2 stories that passed (nothing to cross-check)
-- All stories in the wave were in direct mode (no parallel changes)
+**Skip this section entirely if:**
+- The wave had fewer than 2 stories that passed AND no stories were deferred (nothing to review or resolve)
+- All stories in the wave were in direct mode (no parallel changes or merges)
+
+The wave review has two phases. Phase A handles deferred merge conflicts. Phase B checks cross-cutting consistency. Either or both phases may run depending on the wave state.
+
+---
+
+#### Phase A: Conflict Resolution (deferred stories)
+
+**Skip Phase A if** `deferredStories` is empty.
+
+For each deferred story (sequentially, one at a time):
+
+1. **Re-initiate merge:**
+   ```bash
+   git -c merge.conflictStyle=diff3 merge --no-ff <worker-branch> -m "feat: <STORY_ID> - <STORY_TITLE>"
+   ```
+
+2. **Capture conflict state:**
+   ```bash
+   git diff --name-only --diff-filter=U  # conflicted files
+   ```
+
+3. **Collect context for the reviewer:**
+   - Deferred story info: id, title, description, acceptance criteria
+   - Conflicted files list (from step 2)
+   - All passed stories this wave (id, title, files changed) — for full wave context
+   - Source PRD path
+
+4. **Generate wave-review prompt** from `references/wave-review-prompt-template.md` — substitute placeholders:
+   - `{{WAVE_NUMBER}}` → current wave number
+   - `{{PROJECT_NAME}}` → prd.json `project`
+   - `{{SOURCE_PRD}}` → prd.json `sourcePrd`
+   - `{{PASSED_STORIES}}` → formatted list of passed stories (id, title, description, files changed)
+   - `{{WAVE_DIFF}}` → output of `git diff $WAVE_START_COMMIT..HEAD` (current state including conflict markers)
+   - `{{CODEBASE_PATTERNS}}` → extracted from progress.txt, or "None yet"
+   - `{{CONFLICT_CONTEXT}}` → populated with:
+     ```markdown
+     ## Conflict Resolution Task
+
+     A merge conflict occurred when merging story **<STORY_ID>: <STORY_TITLE>** into the feature branch.
+
+     **Story details:**
+     - **ID:** <STORY_ID>
+     - **Title:** <STORY_TITLE>
+     - **Description:** <STORY_DESCRIPTION>
+     - **Acceptance Criteria:** <formatted criteria list>
+
+     **Conflicted files:**
+     <list of conflicted files>
+
+     **Your primary task:** Resolve the merge conflict in the working tree.
+     1. Read each conflicted file and understand both sides of the conflict
+     2. Edit the files to remove ALL conflict markers (`<<<<<<<`, `|||||||`, `=======`, `>>>>>>>`) while preserving the intent of BOTH the existing branch code and the incoming story's changes
+     3. Stage the resolved files: `git add <resolved-files>`
+     4. Complete the merge: `git commit --no-edit`
+     5. Run the project's typecheck command to verify nothing breaks
+
+     **Important:** You have full context of all stories in this wave. Use that context to make informed merge decisions. Both sides' functionality must be preserved.
+     ```
+
+5. **Spawn Sonnet wave-reviewer:**
+   ```
+   Task(
+     subagent_type: "ralph:wave-reviewer",
+     description: "Resolve conflict + review: <STORY_ID>",
+     prompt: <generated prompt>
+   )
+   ```
+
+6. **Parse reviewer report:**
+
+   a. **FIXED** — reviewer resolved the conflict and committed.
+      - Run typecheck (same detection as §3.5 step 2a).
+      - If pass:
+        - Mark story PASS: `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "completed")`
+        - Update prd.json: set `passes` to `true`
+        - Append to progress.txt (same format as Tier 1 step 2c)
+        - **Clean up worktree and branch:**
+          ```bash
+          git worktree remove --force <worktree-path>
+          git branch -D <worker-branch>
+          ```
+        - Remove story from `deferredStories`
+      - If typecheck fails: `git reset --hard HEAD~1`, treat as ESCALATE (fall through to step 6c).
+
+   b. **CLEAN** — reviewer reports no conflict (unexpected, but handle gracefully). Treat same as FIXED.
+
+   c. **ESCALATE** — reviewer could not resolve the conflict.
+      - Generate coordinator prompt from `references/wave-coordinator-prompt-template.md` — substitute placeholders:
+        - `{{REVIEWER_REPORT}}` → the complete escalation report from the wave reviewer
+        - `{{CONFLICT_CONTEXT}}` → same conflict context as step 4 above
+        - `{{WAVE_NUMBER}}`, `{{PROJECT_NAME}}`, `{{SOURCE_PRD}}` → same as above
+        - `{{PASSED_STORIES}}`, `{{WAVE_DIFF}}`, `{{CODEBASE_PATTERNS}}` → same as above
+      - Spawn Opus wave-coordinator:
+        ```
+        Task(
+          subagent_type: "ralph:wave-coordinator",
+          description: "Resolve escalated conflict: <STORY_ID>",
+          prompt: <generated prompt>
+        )
+        ```
+      - Parse coordinator report:
+        - **FIXED:** run typecheck.
+          - Pass → mark story PASS (same as step 6a pass), cleanup worktree/branch.
+          - Fail → `git reset --hard HEAD~1`, treat as REMEDIATION.
+        - **REMEDIATION:**
+          - `git merge --abort` (undo the pending merge)
+          - Create a remediation story in prd.json:
+            ```json
+            {
+              "id": "US-REM-<NNN>",
+              "title": "Remediate merge conflict: <STORY_ID>",
+              "description": "Resolve merge conflict for <STORY_ID> (<STORY_TITLE>). Conflicted files: <conflicted-files>. Re-apply the story's changes on top of the current branch state.",
+              "acceptanceCriteria": [
+                "All conflicted files are resolved",
+                "Story <STORY_ID>'s functionality is preserved",
+                "Typecheck passes"
+              ],
+              "dependsOn": [<IDs of all passed stories in this wave>],
+              "sharedFiles": [],
+              "priority": <current story priority>,
+              "passes": false,
+              "isRemediation": true,
+              "remediationDepth": <current story's remediationDepth (default 0) + 1>,
+              "notes": "Conflict context: <STORY_ID> (<STORY_TITLE>) had merge conflicts on <conflicted-files>. Wave reviewer and coordinator could not resolve."
+            }
+            ```
+          - Create corresponding task with `TaskCreate`, wire dependencies
+          - Mark original story as pending: `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "pending")`
+          - Append to notes: `"Attempt N: merge conflict, remediation <US-REM-NNN> created"`
+          - **Clean up worktree and branch:**
+            ```bash
+            git worktree remove --force <worktree-path>
+            git branch -D <worker-branch>
+            ```
+
+   d. **FAIL / can't resolve** — fall through to remediation (same as step 6c REMEDIATION path).
+
+---
+
+#### Phase B: Consistency Review (cross-cutting check)
+
+**Skip Phase B if** fewer than 2 stories passed in this wave (including stories resolved in Phase A).
 
 **Steps:**
 
-1. **Compute combined wave diff:**
+1. **Recompute combined wave diff** (may include Phase A resolved conflicts):
    ```bash
    git diff $WAVE_START_COMMIT..HEAD
    ```
 
-2. **Collect passed stories context** — for each story that passed in this wave, gather: id, title, description, acceptance criteria, files changed (from the worker report).
+2. **Collect passed stories context** — for each story that passed in this wave (including newly resolved from Phase A), gather: id, title, description, acceptance criteria, files changed (from the worker report).
 
 3. **Generate wave review prompt** from `references/wave-review-prompt-template.md` — substitute placeholders:
    - `{{WAVE_NUMBER}}` → current wave number
@@ -447,6 +570,7 @@ For each completed worker:
    - `{{PASSED_STORIES}}` → formatted list of passed stories (id, title, description, files changed)
    - `{{WAVE_DIFF}}` → output of `git diff $WAVE_START_COMMIT..HEAD`
    - `{{CODEBASE_PATTERNS}}` → extracted from progress.txt, or "None yet"
+   - `{{CONFLICT_CONTEXT}}` → empty string (no conflict resolution in Phase B)
 
 4. **Spawn Sonnet wave-reviewer:**
    ```
@@ -476,6 +600,7 @@ For each completed worker:
    c. **ESCALATE** — issues too complex for Sonnet.
       - Generate coordinator prompt from `references/wave-coordinator-prompt-template.md` — substitute placeholders:
         - `{{REVIEWER_REPORT}}` → the complete escalation report from the wave reviewer
+        - `{{CONFLICT_CONTEXT}}` → empty string (no conflict resolution in Phase B)
         - `{{WAVE_NUMBER}}`, `{{PROJECT_NAME}}`, `{{SOURCE_PRD}}` → same as above
         - `{{PASSED_STORIES}}`, `{{WAVE_DIFF}}`, `{{CODEBASE_PATTERNS}}` → same as above
       - Spawn Opus wave-coordinator:
@@ -488,7 +613,7 @@ For each completed worker:
         ```
       - Parse coordinator report (Status: FIXED / REMEDIATION):
         - **FIXED:** run typecheck. If pass: log and continue to §3.7. If fail: `git reset --hard HEAD~1`, create remediation stories (treat as REMEDIATION).
-        - **REMEDIATION:** dispatcher creates `US-REM-NNN` stories in prd.json (same format as Tier 4 remediation, `dependsOn` the current wave's passed stories). Create corresponding tasks with `TaskCreate` and wire dependencies.
+        - **REMEDIATION:** dispatcher creates `US-REM-NNN` stories in prd.json (`dependsOn` the current wave's passed stories). Create corresponding tasks with `TaskCreate` and wire dependencies.
 
 6. **Append wave review outcome to progress.txt:**
    ```
@@ -586,14 +711,14 @@ Resolve the failed dependencies to continue.
 6. **state.json writes are dispatcher-only** — only the dispatcher writes to `.ralph-in-claude/state.json`, never subagents.
 7. **Merge serialization** — the dispatcher merges worker branches one at a time, never in parallel. This ensures a clean, linear merge sequence.
 8. **Worker single commit** — each worker must produce exactly one commit in its worktree. This simplifies the merge process and keeps history clean.
-9. **Worktree lifecycle** — in worktree mode, the dispatcher creates worktrees before spawning (`git worktree add`) and cleans up every worktree and its branch after processing (`git worktree remove` + `git branch -D`), regardless of PASS or FAIL. At startup, the dispatcher also removes orphan worktrees from `.ralph-in-claude/worktrees/` left by crashed runs (§1 step 6).
+9. **Worktree lifecycle** — in worktree mode, the dispatcher creates worktrees before spawning (`git worktree add`) and cleans up every worktree and its branch after processing (`git worktree remove` + `git branch -D`), regardless of PASS or FAIL. **Exception:** deferred stories (Tier 3) retain their worktree and branch until wave review Phase A resolves or fails them, at which point cleanup occurs. At startup, the dispatcher also removes orphan worktrees from `.ralph-in-claude/worktrees/` left by crashed runs (§1 step 6).
 10. **Conflict-aware scheduling** — scheduling behavior depends on `conflictStrategy`:
     - **Conservative (default):** any `sharedFiles` overlap between two stories defers the later story to the next wave. This is the safest option.
     - **Optimistic:** only defers stories when EITHER side declares `structural-modify` for the overlapping file. If BOTH sides declare `append-only`, they run in parallel. This maximizes parallelism for barrel files, registries, and config files where stories add independent content.
-11. **Three-tier merge pipeline** — merge conflicts are resolved through escalating tiers: (1) clean merge, (2) append-only auto-resolve, (3) remediation story or FAIL. Each tier is attempted in order; falling through triggers the next.
+11. **Three-tier merge pipeline** — merge conflicts are resolved through escalating tiers: (1) clean merge, (2) append-only auto-resolve, (3) defer to wave review. Tiers 1-2 are attempted during merge; Tier 3 defers the story to the wave review Phase A, where the reviewer (and optionally coordinator) resolve with full wave context. If resolution fails, a remediation story is created.
 12. **Remediation depth cap** — auto-generated remediation stories have a `remediationDepth` field capped at 2. This prevents infinite remediation chains. If depth >= 2, the story falls through to FAIL.
-13. **Wave reviewer serialization** — the wave reviewer runs once per wave, after all merges and state updates are complete (§3.5.1). Only one wave reviewer runs at a time. It must finish before the next wave begins.
-14. **Wave coordinator serialization** — the wave coordinator runs only if the wave reviewer escalates. Only one coordinator runs at a time. It must finish before the next wave begins.
+13. **Wave review serialization** — the wave review runs once per wave, after all merges and state updates are complete (§3.5.1). Phase A (conflict resolution) processes deferred stories sequentially, one at a time. Phase B (consistency check) runs after Phase A completes. Only one wave review runs at a time. It must finish before the next wave begins.
+14. **Wave coordinator serialization** — the wave coordinator runs only if the wave reviewer escalates (in either Phase A or Phase B). Only one coordinator runs at a time. It must finish before the next wave begins.
 
 ---
 
@@ -606,4 +731,4 @@ Resolve the failed dependencies to continue.
 - **Keep the user informed** — report progress after each wave completes.
 - **Task system is ephemeral** — tasks created with TaskCreate don't survive across sessions. prd.json remains the persistent source of truth for story status. Tasks provide real-time visibility and dependency tracking within a session only.
 - **Update state.json at wave boundaries** — write before spawning (workers = `"running"`) and after verification (workers = `"completed"` / `"failed"`). This keeps the WebGUI Kanban board in sync with actual execution state.
-- **Wave review** — runs after each multi-story wave's merges (§3.5.1). Sonnet reviews the combined diff for cross-cutting consistency issues. Minor issues (naming, imports, style) are fixed directly. Major issues (structural, design) are escalated to the Opus coordinator, which can fix them or create remediation stories.
+- **Wave review** — runs after each multi-story wave's merges (§3.5.1). Two phases: **Phase A** resolves deferred merge conflicts (Tier 3) with full wave context — Sonnet reviewer attempts resolution, escalating to Opus coordinator if needed; **Phase B** checks the combined diff for cross-cutting consistency issues (naming, imports, style), with major issues escalated to the coordinator.

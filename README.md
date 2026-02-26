@@ -68,11 +68,15 @@ It works today, but there are still rough edges around hook scoping, subagent co
 │  │   ┌─ 3. Merge Pipeline (worktree mode) ───────────────────────┐    │  │
 │  │   │  Tier 1: git merge --no-ff (clean merge)                   │    │  │
 │  │   │  Tier 2: append-only auto-resolve                          │    │  │
-│  │   │  Tier 3: remediation story or FAIL                         │    │  │
+│  │   │  Tier 3: defer to wave review                               │    │  │
 │  │   └────────────────────────────────────────────────────────────┘    │  │
 │  │                                 │                                   │  │
 │  │                                 ▼                                   │  │
 │  │   4. Typecheck ──→ Update prd.json ──→ Append progress.txt          │  │
+│  │                                 │                                   │  │
+│  │                                 ▼                                   │  │
+│  │   5. Wave Review (Phase A: resolve deferred conflicts,              │  │
+│  │                   Phase B: consistency check)                       │  │
 │  └─────────────────────────────────────────────────────────────────────┘  │
 │                                    │                                      │
 │                                    ▼                                      │
@@ -282,12 +286,12 @@ The project-level `conflictStrategy` controls how the dispatcher handles overlap
 - **`"optimistic"`** — allows `append-only` overlaps to run in parallel, with a tiered merge pipeline:
   1. **Tier 1:** `git merge` — if it succeeds cleanly, done
   2. **Tier 2:** Append-only auto-resolve — automatically resolves conflict markers in files tagged `append-only`
-  3. **Tier 3:** Remediation story or FAIL — creates a remediation story to re-apply changes, or marks the story as failed
+  3. **Tier 3:** Defer to wave review — the story's merge is aborted and deferred to Phase A of the wave review, where the Sonnet wave-reviewer (with full wave context) attempts resolution. If the reviewer can't resolve, the Opus coordinator tries. If neither succeeds, a remediation story is created.
 
 ### Quality Gates
 
 - **Dispatcher:** typecheck after each wave, `git merge --no-ff` per worker branch, retries failed stories up to 3 times
-- **Wave review:** after each multi-story wave, a Sonnet wave-reviewer checks the combined diff for cross-cutting consistency issues (naming, imports, style). Major issues are escalated to an Opus wave-coordinator that can fix them or create remediation stories.
+- **Wave review:** after each multi-story wave, a two-phase review runs: **Phase A** resolves any deferred merge conflicts (Tier 3) with full wave context — the Sonnet reviewer attempts resolution first, escalating to the Opus coordinator if needed; **Phase B** checks the combined diff for cross-cutting consistency issues (naming, imports, style), with major issues escalated to the coordinator.
 - **Hooks:** validates prd.json schema on every Write/Edit (JSON integrity, required fields, `dependsOn` referential check)
 
 ## 🐛 Debugging
