@@ -11,7 +11,7 @@ Packaged as a **Claude Code plugin** with three namespaced skills: `ralph:prd`, 
 
 ## 📰 Recent Updates
 
-**v0.4.0** — Post-wave code review system (Sonnet wave-reviewer + Opus wave-coordinator for escalation); switched from Task tool's `isolation: "worktree"` to dispatcher-managed worktrees — the platform's worktree isolation creates from stale refs, so Wave N+1 workers couldn't see Wave N's merged changes, wasting ~80K tokens on redundant re-implementation per multi-wave run; orphan worktree cleanup at startup.
+**v0.4.0** — Post-wave code review system (Sonnet wave-reviewer + Opus wave-coordinator for escalation); switched from Task tool's `isolation: "worktree"` to dispatcher-managed worktrees — the platform's worktree isolation creates from stale refs, so Wave N+1 workers couldn't see Wave N's merged changes, causing them to redundantly re-implement previous work and then hit merge conflicts on the duplicated code; removed experimental conflict-resolver agent (Tier 3) in favor of the wave-reviewer/coordinator pipeline; orphan worktree cleanup at startup.
 
 **v0.3.7** — Next-step prompts in `ralph:prd` and `ralph:convert` skills guide users through the workflow.
 
@@ -23,7 +23,7 @@ Packaged as a **Claude Code plugin** with three namespaced skills: `ralph:prd`, 
 
 **v0.3.2 ~ v0.3.3** — Switched ralph-worker model from Opus to Sonnet for better cost/speed balance.
 
-**v0.3.0 ~ v0.3.1** — Worktree isolation for parallel workers. Added `sharedFiles` / `conflictStrategy` fields to prd.json, append-only conflict auto-resolve, and conflict-resolver agent (experimental, untested).
+**v0.3.0 ~ v0.3.1** — Worktree isolation for parallel workers. Added `sharedFiles` / `conflictStrategy` fields to prd.json, append-only conflict auto-resolve.
 
 ## 💡 Motivation
 
@@ -68,10 +68,7 @@ It works today, but there are still rough edges around hook scoping, subagent co
 │  │   ┌─ 3. Merge Pipeline (worktree mode) ───────────────────────┐    │  │
 │  │   │  Tier 1: git merge --no-ff (clean merge)                   │    │  │
 │  │   │  Tier 2: append-only auto-resolve                          │    │  │
-│  │   │  Tier 3: conflict-resolver agent *                         │    │  │
-│  │   │  Tier 4: abort & retry as failed story                     │    │  │
-│  │   │                                                            │    │  │
-│  │   │  * experimental, untested — see Conflict Resolution below  │    │  │
+│  │   │  Tier 3: remediation story or FAIL                         │    │  │
 │  │   └────────────────────────────────────────────────────────────┘    │  │
 │  │                                 │                                   │  │
 │  │                                 ▼                                   │  │
@@ -200,8 +197,7 @@ ralph-in-claude/
 ├── agents/
 │   ├── ralph-worker.md                 # Worker agent definition (shipped with plugin)
 │   ├── wave-reviewer.md                # Sonnet agent — post-wave consistency review
-│   ├── wave-coordinator.md             # Opus agent — escalated wave issue resolution
-│   └── conflict-resolver.md            # Conflict resolution agent (experimental, untested)
+│   └── wave-coordinator.md             # Opus agent — escalated wave issue resolution
 ├── hooks/
 │   └── hooks.json                      # Plugin-level PreToolUse hooks (prd.json validation)
 ├── scripts/
@@ -217,8 +213,7 @@ ralph-in-claude/
 │       └── references/
 │           ├── subagent-prompt-template.md  # Worker prompt (dynamic context only)
 │           ├── wave-review-prompt-template.md       # Wave reviewer prompt
-│           ├── wave-coordinator-prompt-template.md  # Wave coordinator prompt
-│           └── conflict-resolver-prompt-template.md # Conflict resolver prompt (experimental)
+│           └── wave-coordinator-prompt-template.md  # Wave coordinator prompt
 ├── docs/
 │   ├── plan.md                         # Native Plugin design document
 │   └── WIP.md                          # Open issues & backlog
@@ -267,9 +262,7 @@ Between iterations, knowledge persists through:
 - **`CLAUDE.md`** — reusable patterns that Claude Code auto-reads
 - **Git history** — committed code from previous iterations
 
-### Shared Files & Conflict Resolution (experimental, untested)
-
-> **Note:** This feature has been implemented but has **not yet been triggered in any real-world run**. All test scenarios so far had clean merges or append-only changes that resolved automatically. Use with caution.
+### Shared Files & Conflict Resolution
 
 Stories can declare shared files via `sharedFiles` to indicate files that multiple stories may modify:
 
@@ -289,8 +282,7 @@ The project-level `conflictStrategy` controls how the dispatcher handles overlap
 - **`"optimistic"`** — allows `append-only` overlaps to run in parallel, with a tiered merge pipeline:
   1. **Tier 1:** `git merge` — if it succeeds cleanly, done
   2. **Tier 2:** Append-only auto-resolve — automatically resolves conflict markers in files tagged `append-only`
-  3. **Tier 3:** Conflict resolver agent — spawns `conflict-resolver` subagent to intelligently resolve structural conflicts
-  4. **Tier 4:** Abort and retry — treats the story as failed
+  3. **Tier 3:** Remediation story or FAIL — creates a remediation story to re-apply changes, or marks the story as failed
 
 ### Quality Gates
 

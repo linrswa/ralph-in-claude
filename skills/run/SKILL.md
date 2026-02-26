@@ -40,7 +40,7 @@ Options:
 3. **Read the source PRD** from the `sourcePrd` field for additional context.
 4. **Read `conflictStrategy`** from prd.json (defaults to `"conservative"` if absent). Log which mode is active:
    - `"conservative"` — all sharedFiles overlaps defer to separate waves (maximum safety)
-   - `"optimistic"` — only `structural-modify` overlaps defer; `append-only` overlaps run in parallel; conflict resolver agent available on merge failure
+   - `"optimistic"` — only `structural-modify` overlaps defer; `append-only` overlaps run in parallel
 5. **Check git branch** — ensure you're on the branch specified by `branchName`. If not:
    - If the branch exists: `git checkout <branchName>`
    - If not: `git checkout -b <branchName>` from `baseBranch` (default: `main`)
@@ -358,47 +358,9 @@ For each completed worker:
          - Proceed as Tier 1 PASS (step 2c)
       4. If ANY conflict has non-empty base → fall through to Tier 3
 
-   e. **Tier 3 — Conflict resolver agent (optimistic mode only):**
-      If `conflictStrategy` is `"optimistic"` AND Tier 2 failed (non-append-only conflicts):
-      1. **Do NOT abort the merge** — leave the merge in its conflict state (`MERGE_HEAD` exists, conflict markers in files)
-      2. **Identify the conflicting merged story** — match conflicted files against each previously-merged worker's "Files changed" report from this wave to find which merged story caused the conflict
-      3. **Capture both stories' diffs** restricted to conflicted files:
-         ```bash
-         # Get the failed story's diff on conflicted files
-         git diff <merge-base>..<worker-branch> -- <conflicted-files>
-         # Get the merged story's diff on conflicted files
-         git diff <merge-base>..<merged-story-commit> -- <conflicted-files>
-         ```
-      4. **Generate resolver prompt** — read the template at `references/conflict-resolver-prompt-template.md` and substitute placeholders:
-         - `{{FAILED_STORY_ID}}`, `{{FAILED_STORY_TITLE}}`, `{{FAILED_STORY_DESCRIPTION}}`, `{{FAILED_STORY_CRITERIA}}` — from the story being merged
-         - `{{MERGED_STORY_ID}}`, `{{MERGED_STORY_TITLE}}`, `{{MERGED_STORY_DESCRIPTION}}`, `{{MERGED_STORY_CRITERIA}}` — from the identified conflicting merged story
-         - `{{CONFLICTED_FILES}}` — list of files with conflicts
-         - `{{BRANCH_NAME}}` — the worker branch being merged
-         - `{{MERGED_STORY_DIFF}}` — diff of the merged story on conflicted files
-         - `{{FAILED_STORY_DIFF}}` — diff of the failed story on conflicted files
-         - `{{PROJECT_NAME}}` — prd.json `project`
-         - `{{SOURCE_PRD}}` — prd.json `sourcePrd`
-         - `{{CODEBASE_PATTERNS}}` — extracted from progress.txt, or "None yet"
-      5. **Spawn conflict resolver** — this is a **blocking** call (NOT in worktree — must work in the main tree where `MERGE_HEAD` exists):
-         ```
-         Task(
-           subagent_type: "ralph:conflict-resolver",
-           description: "Resolve conflict: <STORY_ID> vs <MERGED_STORY_ID>",
-           prompt: <generated prompt from template>
-         )
-         ```
-         **CRITICAL:** Do NOT use `isolation: "worktree"` — the resolver must work in the main working tree where the merge conflict state exists.
-      6. **Parse resolver report** — extract Status, Commit, Confidence
-      7. **If resolver PASS AND typecheck passes:**
-         - Proceed as Tier 1 PASS (step 2c)
-         - Log: `"Conflict resolved by resolver agent (<CONFIDENCE> confidence): <files>"`
-      8. **If resolver FAIL, confidence LOW, or typecheck fails:**
-         - `git merge --abort` (or `git reset --hard HEAD` if the resolver already committed)
-         - Fall through to Tier 4
-
-   f. **Tier 4 — Remediation or FAIL** (worktree mode only)**:**
+   e. **Tier 3 — Remediation or FAIL** (worktree mode only)**:**
       If all previous tiers failed:
-      1. **If `conflictStrategy` is `"conservative"` OR Tier 3 was skipped:**
+      1. **If `conflictStrategy` is `"conservative"`:**
          - `git merge --abort` (if not already aborted)
          - Mark as FAIL with reason = `"merge conflict"`
          - `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "pending")` — returns task to ready pool
@@ -431,7 +393,7 @@ For each completed worker:
          - **Clean up worktree and branch** (same as step 2c — worktree mode only)
          - When the remediation story later passes and merges, the dispatcher also marks the original story as passed (check remediation notes for the original story ID)
       3. **Otherwise (remediationDepth >= 2):**
-         - Same as conservative FAIL (step f.1)
+         - Same as conservative FAIL (step e.1)
          - Log: `"Remediation depth limit reached for <STORY_ID>"`
 
 3. **If FAIL** (worker reported FAIL or typecheck failed):
@@ -628,11 +590,10 @@ Resolve the failed dependencies to continue.
 10. **Conflict-aware scheduling** — scheduling behavior depends on `conflictStrategy`:
     - **Conservative (default):** any `sharedFiles` overlap between two stories defers the later story to the next wave. This is the safest option.
     - **Optimistic:** only defers stories when EITHER side declares `structural-modify` for the overlapping file. If BOTH sides declare `append-only`, they run in parallel. This maximizes parallelism for barrel files, registries, and config files where stories add independent content.
-11. **Four-tier merge pipeline** — merge conflicts are resolved through escalating tiers: (1) clean merge, (2) append-only auto-resolve, (3) conflict resolver agent (optimistic mode only), (4) remediation story or FAIL. Each tier is attempted in order; falling through triggers the next.
-12. **Conflict resolver serialization** — the conflict resolver agent runs one at a time, blocking the merge pipeline. It operates in the main working tree (NOT a worktree) because it must resolve the active merge state where `MERGE_HEAD` exists. No other merges or spawns occur while a resolver is active.
-13. **Remediation depth cap** — auto-generated remediation stories have a `remediationDepth` field capped at 2. This prevents infinite remediation chains. If depth >= 2, the story falls through to FAIL.
-14. **Wave reviewer serialization** — the wave reviewer runs once per wave, after all merges and state updates are complete (§3.5.1). Only one wave reviewer runs at a time. It must finish before the next wave begins.
-15. **Wave coordinator serialization** — the wave coordinator runs only if the wave reviewer escalates. Only one coordinator runs at a time. It must finish before the next wave begins.
+11. **Three-tier merge pipeline** — merge conflicts are resolved through escalating tiers: (1) clean merge, (2) append-only auto-resolve, (3) remediation story or FAIL. Each tier is attempted in order; falling through triggers the next.
+12. **Remediation depth cap** — auto-generated remediation stories have a `remediationDepth` field capped at 2. This prevents infinite remediation chains. If depth >= 2, the story falls through to FAIL.
+13. **Wave reviewer serialization** — the wave reviewer runs once per wave, after all merges and state updates are complete (§3.5.1). Only one wave reviewer runs at a time. It must finish before the next wave begins.
+14. **Wave coordinator serialization** — the wave coordinator runs only if the wave reviewer escalates. Only one coordinator runs at a time. It must finish before the next wave begins.
 
 ---
 

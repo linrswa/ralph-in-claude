@@ -79,7 +79,7 @@ Convert a PRD markdown file to Ralph's JSON format:
 - For UI stories, include browser verification
 - Every story must have a `dependsOn` array declaring inter-story dependencies (story IDs). Stories won't be picked until all dependencies have `passes: true`. Use `[]` for root stories with no dependencies.
 - Every story must have a `sharedFiles` array listing files this story modifies that other stories may also modify. Each entry can be a string (backward-compatible, treated as `structural-modify`) or an object: `{ "file": "src/index.ts", "conflictType": "append-only", "reason": "import registration" }`. Use `[]` if no shared files.
-- Optional `conflictStrategy` at project level: `"conservative"` (default) defers all overlaps; `"optimistic"` allows `append-only` overlaps in parallel and enables the conflict resolver agent.
+- Optional `conflictStrategy` at project level: `"conservative"` (default) defers all overlaps; `"optimistic"` allows `append-only` overlaps in parallel.
 
 ## Key Files
 

@@ -1,47 +1,117 @@
 #!/bin/bash
 set -euo pipefail
 
-PLUGIN_JSON="$(dirname "$0")/.claude-plugin/plugin.json"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_JSON="$SCRIPT_DIR/.claude-plugin/plugin.json"
 
+usage() {
+  cat <<EOF
+Usage: ./release.sh <patch|minor|major> [options]
+
+Options:
+  -n, --release-note <text>    Inline release notes (multiline supported)
+  -f, --release-note-file <f>  Read release notes from file
+  --dry-run                    Show what would happen without executing
+  -h, --help                   Show this help
+
+Examples:
+  ./release.sh minor -n "## Highlights
+  - Post-wave code review system
+  - Worktree HEAD inheritance fix"
+
+  ./release.sh patch -f RELEASE_NOTES.md
+  ./release.sh minor                        # auto-generates notes from commits
+EOF
+}
+
+# --- Parse arguments ---
+BUMP=""
+NOTES=""
+NOTES_FILE=""
+DRY_RUN=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    patch|minor|major)
+      BUMP="$1"; shift ;;
+    -n|--release-note)
+      NOTES="${2:?Error: --release-note requires a value}"; shift 2 ;;
+    -f|--release-note-file)
+      NOTES_FILE="${2:?Error: --release-note-file requires a path}"
+      if [[ ! -f "$NOTES_FILE" ]]; then
+        echo "Error: file not found: $NOTES_FILE" >&2; exit 1
+      fi
+      shift 2 ;;
+    --dry-run)
+      DRY_RUN=true; shift ;;
+    -h|--help)
+      usage; exit 0 ;;
+    *)
+      echo "Error: unknown argument '$1'" >&2; usage; exit 1 ;;
+  esac
+done
+
+if [[ -z "$BUMP" ]]; then
+  echo "Error: bump type required (patch|minor|major)" >&2
+  usage
+  exit 1
+fi
+
+# --- Read current version ---
 if [[ ! -f "$PLUGIN_JSON" ]]; then
-  echo "Error: $PLUGIN_JSON not found"
+  echo "Error: $PLUGIN_JSON not found" >&2
   exit 1
 fi
 
 current=$(grep -o '"version": *"[^"]*"' "$PLUGIN_JSON" | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+')
 IFS='.' read -r major minor patch <<< "$current"
 
-case "${1:-}" in
+case "$BUMP" in
   patch) patch=$((patch + 1)) ;;
   minor) minor=$((minor + 1)); patch=0 ;;
   major) major=$((major + 1)); minor=0; patch=0 ;;
-  *)
-    echo "Usage: ./release.sh <patch|minor|major>"
-    echo "Current version: $current"
-    exit 1
-    ;;
 esac
 
 next="$major.$minor.$patch"
 
+echo "Version: $current → $next ($BUMP)"
+
+# --- Build gh release args ---
+GH_ARGS=(gh release create "v$next" --title "v$next")
+
+if [[ -n "$NOTES" ]]; then
+  GH_ARGS+=(--notes "$NOTES")
+elif [[ -n "$NOTES_FILE" ]]; then
+  GH_ARGS+=(--notes-file "$NOTES_FILE")
+else
+  GH_ARGS+=(--generate-notes)
+fi
+
+# --- Dry run ---
+if $DRY_RUN; then
+  echo ""
+  echo "[dry-run] Would bump $PLUGIN_JSON to $next"
+  echo "[dry-run] Would commit, tag v$next, push"
+  echo "[dry-run] Would run: ${GH_ARGS[*]}"
+  if [[ -n "$NOTES" ]]; then
+    echo "[dry-run] Release notes:"
+    echo "$NOTES"
+  fi
+  exit 0
+fi
+
+# --- Execute ---
+cd "$SCRIPT_DIR"
+
 sed -i "s/\"version\": *\"$current\"/\"version\": \"$next\"/" "$PLUGIN_JSON"
-
-echo "$current -> $next"
-
-cd "$(dirname "$0")"
 git add .claude-plugin/plugin.json
 git commit -m "chore: bump version to $next"
 git tag "v$next"
 git push
 git push --tags
 
-NOTES_FILE="${2:-}"
-if [[ -n "$NOTES_FILE" && -f "$NOTES_FILE" ]]; then
-  gh release create "v$next" --title "v$next" --notes-file "$NOTES_FILE"
-else
-  gh release create "v$next" --title "v$next" --generate-notes
-fi
+"${GH_ARGS[@]}"
 
-claude plugin update ralph@local
-
-echo "Released $next"
+echo ""
+echo "Released v$next"
+echo "https://github.com/$(gh repo view --json nameWithOwner -q .nameWithOwner)/releases/tag/v$next"
