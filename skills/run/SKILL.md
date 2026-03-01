@@ -360,7 +360,7 @@ For each completed worker:
 
 ### 3.5 Wave Review (Conflict Resolution + Consistency Check + Bridge Work)
 
-Each phase below has its own skip condition — evaluate them independently.
+**Do NOT skip this section based on wave size or mode.** Each phase has its own skip condition — you MUST evaluate all three phases (A, B, C) independently, even for single-story or direct-mode waves. Phase C (bridge work) commonly applies to single-story waves.
 
 #### Phase A: Conflict Resolution
 
