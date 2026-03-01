@@ -358,9 +358,9 @@ For each completed worker:
 
 **After each story result**, update state.json: set worker `status`/`completedAt`, add to `failedStories` if failed, update `lastUpdated`.
 
-### 3.5 Wave Review (Conflict Resolution + Consistency Check)
+### 3.5 Wave Review (Conflict Resolution + Consistency Check + Bridge Work)
 
-**Skip entirely if:** the wave had fewer than 2 passed stories AND no deferred stories, OR all stories were direct mode.
+Each phase below has its own skip condition — evaluate them independently.
 
 #### Phase A: Conflict Resolution
 
