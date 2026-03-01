@@ -10,8 +10,6 @@ Create detailed Product Requirements Documents that are clear, actionable, and s
 
 **CRITICAL: When asking clarifying questions, ALWAYS use the `AskUserQuestion` tool. Do NOT output questions as plain text. The `AskUserQuestion` tool provides an interactive UI with selectable options.**
 
----
-
 ## The Job
 
 1. Receive a feature description from the user
@@ -34,13 +32,7 @@ Ask only critical questions where the initial prompt is ambiguous. Focus on:
 
 **IMPORTANT:** You MUST use the `AskUserQuestion` tool to ask these questions. This provides an interactive UI with selectable options instead of plain text. Structure your questions with 2-4 options each.
 
-### Example Questions:
-
-- "What is the primary goal of this feature?" with options like "Improve user onboarding", "Increase retention", "Reduce support burden"
-- "Who is the target user?" with options like "New users only", "Existing users", "All users", "Admin users"
-- "What is the scope?" with options like "Minimal viable version", "Full-featured implementation", "Backend/API only", "UI only"
-
-The user can always select "Other" to provide custom input.
+e.g., "What's the scope?" (Minimal / Full / API only / UI only) — the user can always select "Other" for custom input.
 
 ---
 
@@ -74,9 +66,7 @@ Each story should be small enough to implement in one focused session.
 - [ ] **[UI stories only]** Verify in browser
 ```
 
-**Important:**
-- Acceptance criteria must be verifiable, not vague. "Works correctly" is bad. "Button shows confirmation dialog before deleting" is good.
-- **For any story with UI changes:** Always include browser verification as acceptance criteria.
+**Important:** Acceptance criteria must be verifiable, not vague. "Works correctly" is bad. "Button shows confirmation dialog before deleting" is good.
 
 ### 4. Functional Requirements
 Numbered list of specific functionalities:
@@ -88,45 +78,23 @@ Be explicit and unambiguous.
 ### 5. Non-Goals (Out of Scope)
 What this feature will NOT include. Critical for managing scope.
 
-### 6. Design Considerations (Optional)
-- UI/UX requirements
-- Link to mockups if available
-- Relevant existing components to reuse
+### 6. Technical & Design Considerations (Optional)
+- UI/UX requirements, mockups, existing components to reuse
+- Known constraints, dependencies, integration points, performance requirements
 
-### 7. Technical Considerations (Optional)
-- Known constraints or dependencies
-- Integration points with existing systems
-- Performance requirements
-
-### 8. Success Metrics
+### 7. Success Metrics
 How will success be measured?
 - "Reduce time to complete X by 50%"
 - "Increase conversion rate by 10%"
 
-### 9. Open Questions
+### 8. Open Questions
 Remaining questions or areas needing clarification.
-
----
 
 ## Writing for Junior Developers
 
-The PRD reader may be a junior developer or AI agent. Therefore:
-
-- Be explicit and unambiguous
-- Avoid jargon or explain it
+- Be explicit and unambiguous — avoid jargon or explain it
 - Provide enough detail to understand purpose and core logic
-- Number requirements for easy reference
-- Use concrete examples where helpful
-
----
-
-## Output
-
-- **Format:** Markdown (`.md`)
-- **Location:** `.ralph-in-claude/tasks/`
-- **Filename:** `prd-[feature-name].md` (kebab-case)
-
----
+- Use concrete examples and number requirements for easy reference
 
 ## Checklist
 
@@ -134,15 +102,14 @@ Before saving the PRD:
 
 - [ ] Asked clarifying questions with lettered options
 - [ ] Incorporated user's answers
-- [ ] User stories are small and specific
+- [ ] User stories are small and specific (one focused session each)
 - [ ] Functional requirements are numbered and unambiguous
 - [ ] Non-goals section defines clear boundaries
-- [ ] Saved to `.ralph-in-claude/tasks/prd-[feature-name].md`
 
 ---
 
 ## Next Step
 
-After saving the PRD, tell the user:
+Save as `.ralph-in-claude/tasks/prd-[feature-name].md`, then tell the user:
 
 > PRD saved. Next step: run `/ralph:convert` to convert it to prd.json for execution.
