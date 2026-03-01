@@ -490,17 +490,18 @@ Conservative 模式下所有重疊一律延遲（現有行為不變）。
 
 1. **Tier 1**：Clean merge（無衝突）→ PASS
 2. **Tier 2**：Append-only auto-resolve → PASS（所有 hunk 的 diff3 base section 為空 → 移除標記、git add、commit）
-3. **Tier 3**（僅 optimistic 模式）：Conflict resolver agent — spawn `ralph:conflict-resolver` 在主工作目錄（非 worktree）解決衝突，blocking call，解決後 typecheck 驗證
-4. **Tier 4**：Remediation story 或 FAIL — optimistic 模式且 `remediationDepth < 2` 時建立修復 story，否則標記 FAIL
+3. **Tier 3**：Defer to wave review — merge abort，延遲到 Phase A 由 wave-reviewer（Sonnet，擁有完整 wave context）解決；若 reviewer 無法解決，升級到 wave-coordinator（Opus）；若均無法解決，降級到 Tier 4
+4. **Tier 4**：Remediation story 或 FAIL — `remediationDepth < 2` 時建立修復 story，否則標記 FAIL
 
-### 8.5 Conflict Resolver Agent
+### 8.5 Wave Review Pipeline（取代原 Conflict Resolver Agent）
 
-新增 `agents/conflict-resolver.md`，使用 opus model：
-- 接收含有衝突標記的工作目錄（MERGE_HEAD 存在）
-- Context 包含兩個 stories 的描述、驗收標準、diffs
-- 解決衝突後執行 typecheck 驗證
-- 回報 Status、Commit、Confidence（HIGH/MEDIUM/LOW）
-- LOW confidence 或無法解決 → 回報 FAIL，dispatcher 降級到 Tier 4
+> **注意：** 原設計的獨立 `agents/conflict-resolver.md` 已在 v0.4.0 移除，改為 wave-reviewer/coordinator 管線。
+
+Tier 3 衝突由 wave review 三階段處理：
+- **Phase A**：解決延遲的 merge 衝突 — wave-reviewer（Sonnet）擁有完整 wave diff context，嘗試 intent-preserving 合併；失敗則升級到 wave-coordinator（Opus）
+- **Phase B**：跨 story 一致性檢查 — 命名、import、風格等 cross-cutting 問題
+- **Phase C**：Bridge work — 為下一波 wave 準備共用檔案（如插入 append-only marker comments）
+- 若 Phase A 無法解決 → 降級到 Tier 4（建立 remediation story 或標記 FAIL）
 
 ### 8.6 Convert Skill 改進
 
@@ -512,8 +513,10 @@ Conservative 模式下所有重疊一律延遲（現有行為不變）。
 
 | 檔案 | 動作 | 內容 |
 |------|------|------|
-| `agents/conflict-resolver.md` | CREATE | Conflict resolver agent 定義 |
-| `skills/run/references/conflict-resolver-prompt-template.md` | CREATE | Resolver prompt 模板 |
+| `agents/wave-reviewer.md` | CREATE | Wave reviewer agent（Sonnet） |
+| `agents/wave-coordinator.md` | CREATE | Wave coordinator agent（Opus，處理升級問題） |
+| `skills/run/references/wave-review-prompt-template.md` | CREATE | Wave review prompt 模板 |
+| `skills/run/references/wave-coordinator-prompt-template.md` | CREATE | Wave coordinator prompt 模板 |
 | `skills/run/SKILL.md` | MODIFY | §1 strategy 解析、§3.2 conflict-aware scheduling、§3.5 four-tier pipeline、§6 concurrency rules |
 | `skills/convert/SKILL.md` | MODIFY | Rule #10、新增 Conflict Analysis section、output format、checklist |
 | `scripts/validate-prd-write.sh` | MODIFY | 接受多型 sharedFiles、驗證新的可選欄位 |
@@ -522,6 +525,6 @@ Conservative 模式下所有重疊一律延遲（現有行為不變）。
 ### Phase 5c Rules（在 5a 基礎上新增）
 
 18. **Conflict-aware scheduling** — 排程行為取決於 `conflictStrategy`：conservative 模式延遲所有重疊；optimistic 模式只延遲 `structural-modify` 重疊，允許 `append-only` 重疊平行
-19. **Four-tier merge pipeline** — 衝突解決依序嘗試：clean merge → append-only auto-resolve → conflict resolver agent（僅 optimistic）→ remediation story 或 FAIL
-20. **Conflict resolver serialization** — conflict resolver agent 一次只執行一個，在主工作目錄（非 worktree）運行，阻塞 merge pipeline
+19. **Four-tier merge pipeline** — 衝突解決依序嘗試：clean merge → append-only auto-resolve → defer to wave review → remediation story 或 FAIL
+20. **Wave review pipeline** — Tier 3 衝突延遲到 wave review Phase A 處理，由 wave-reviewer（Sonnet）嘗試解決，失敗則升級到 wave-coordinator（Opus）
 21. **Remediation depth cap** — 自動產生的修復 story `remediationDepth` 上限為 2，防止無限修復鏈

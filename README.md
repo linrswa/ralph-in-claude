@@ -76,7 +76,8 @@ It works today, but there are still rough edges around hook scoping, subagent co
 │  │                                 │                                   │  │
 │  │                                 ▼                                   │  │
 │  │   5. Wave Review (Phase A: resolve deferred conflicts,              │  │
-│  │                   Phase B: consistency check)                       │  │
+│  │                   Phase B: consistency check,                       │  │
+│  │                   Phase C: bridge work for next wave)               │  │
 │  └─────────────────────────────────────────────────────────────────────┘  │
 │                                    │                                      │
 │                                    ▼                                      │
@@ -291,7 +292,7 @@ The project-level `conflictStrategy` controls how the dispatcher handles overlap
 ### Quality Gates
 
 - **Dispatcher:** typecheck after each wave, `git merge --no-ff` per worker branch, retries failed stories up to 3 times
-- **Wave review:** after each multi-story wave, a two-phase review runs: **Phase A** resolves any deferred merge conflicts (Tier 3) with full wave context — the Sonnet reviewer attempts resolution first, escalating to the Opus coordinator if needed; **Phase B** checks the combined diff for cross-cutting consistency issues (naming, imports, style), with major issues escalated to the coordinator.
+- **Wave review:** after each multi-story wave, a three-phase review runs: **Phase A** resolves any deferred merge conflicts (Tier 3) with full wave context — the Sonnet reviewer attempts resolution first, escalating to the Opus coordinator if needed; **Phase B** checks the combined diff for cross-cutting consistency issues (naming, imports, style), with major issues escalated to the coordinator; **Phase C** performs bridge work for the next wave (e.g., inserting append-only marker comments in shared files to enable safe parallel modification).
 - **Hooks:** validates prd.json schema on every Write/Edit (JSON integrity, required fields, `dependsOn` referential check)
 
 ## 🐛 Debugging
