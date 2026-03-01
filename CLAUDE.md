@@ -109,6 +109,8 @@ Both scripts are shared at the plugin root `scripts/` directory and referenced f
 
 ## Story Sizing
 
+Ralph spawns a fresh instance per story with no memory of previous work — oversized stories exhaust context and produce broken code.
+
 **Right-sized (one iteration):**
 - Add a database column
 - Create a UI component

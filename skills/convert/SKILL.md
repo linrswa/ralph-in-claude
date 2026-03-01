@@ -69,7 +69,7 @@ Converts existing PRDs to the prd.json format that Ralph uses for autonomous exe
 
 ---
 
-> *For story sizing and ordering guidelines, see CLAUDE.md "Story Sizing" section.*
+> *For story sizing guidelines, see CLAUDE.md "Story Sizing" section.*
 
 ---
 
@@ -104,7 +104,7 @@ Always end with `"Typecheck passes"`; add `"Tests pass"` for testable logic, `"V
 6. **sourcePrd**: Path to the original PRD file (relative to project root). Ralph will read this file during implementation for additional context.
 7. **branchName**: Derive from feature name, kebab-case, prefixed with `ralph/`
 8. **Always add**: "Typecheck passes" to every story's acceptance criteria
-9. **dependsOn**: Analyze the PRD for inter-story dependencies. Set `dependsOn` to an array of story IDs that must be completed before this story can start. Root stories (no dependencies) use `[]`. Order by dependency depth: schema/migrations first, then backend/services, then UI components.
+9. **dependsOn**: Analyze the PRD for inter-story dependencies (if a story uses a schema/resource created by another story, it depends on that story). Set `dependsOn` to an array of story IDs that must be completed before this story can start. Root stories (no dependencies) use `[]`. Order by dependency depth: schema/migrations first, then backend/services, then UI components.
 10. **sharedFiles**: Identify files this story will modify that other stories in the same wave may also modify. Each entry can be a **string** (backward-compatible, treated as `structural-modify`) or an **object** with conflict classification:
     ```json
     { "file": "src/index.ts", "conflictType": "append-only", "reason": "import registration" }

@@ -29,6 +29,7 @@ On failure, execute the `on_fail` action specified at the call site.
 ### CLEANUP_WORKTREE(story)
 
 **Worktree mode only** — skip in direct mode. Uses dispatch tracking from §3.3.
+**Exception:** Tier 3 deferred stories retain their worktrees until conflict resolution completes — do not call this procedure for them.
 ```bash
 git worktree remove --force <worktree-path>
 git branch -D ralph-worker-<STORY_ID>
@@ -141,7 +142,7 @@ Options:
    git branch --list 'ralph-worker-*' | xargs -r git branch -D
    ```
 7. **Initialize `storyIdToTaskId`** — internal mapping from story IDs (e.g., `"US-001"`) to TaskCreate-returned task IDs.
-8. **Write `.ralph-in-claude/state.json`** — schema (used throughout, updated at wave boundaries):
+8. **Write `.ralph-in-claude/state.json`** — powers the WebGUI Kanban view. Schema (used throughout, updated at wave boundaries):
    ```json
    {
      "status": "running | completed",
@@ -315,7 +316,7 @@ For each story in wave:
 WAVE_START_COMMIT=$(git rev-parse HEAD)
 ```
 
-When all subagents return, process each story **sequentially** (to serialize merges). Look up dispatch info from §3.3.
+When all subagents return, process each story **sequentially** (to serialize merges). Merge stories one at a time, never in parallel. Look up dispatch info from §3.3.
 
 For each completed worker:
 
@@ -350,7 +351,10 @@ For each completed worker:
    - Direct mode (dirty state): `git checkout -- . && git clean -fd`
    - `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "pending")`
    - Append `"Attempt N failed: <reason>"` to story's `notes` in prd.json
-   - If retry count >= 3: report to user with all attempt reasons and suggest: split the story, add implementation notes, or skip
+   - If retry count >= 3: report to user with all attempt reasons and suggest: split the story, add implementation notes, or skip. Error report format by scenario:
+     - **Retry exhaustion:** list each attempt number + actions taken + failure reason
+     - **Cycle detection:** list the story IDs forming the cycle (e.g., `US-003 → US-005 → US-003`)
+     - **Blocked stories:** list each blocked story ID with its unmet `dependsOn` IDs
 
 **After each story result**, update state.json: set worker `status`/`completedAt`, add to `failedStories` if failed, update `lastUpdated`.
 
@@ -455,6 +459,7 @@ When all stories have `passes: true`:
 2. **Worker single commit** — each worker must produce exactly one commit.
 3. **Remediation depth cap** — `remediationDepth` capped at 2. Enforced in `CREATE_REMEDIATION`.
 4. **Worktree isolation** — only the assigned worker may `cd` into a worktree. The dispatcher creates/removes worktrees and merges branches from the feature branch root — never by entering the worktree directory.
+5. **Wave review serialization** — wave review and coordinator run sequentially — each must complete before the next wave begins. Never run reviews in parallel.
 
 ---
 
