@@ -388,7 +388,7 @@ For each deferred story (sequentially):
    **Both sides' functionality must be preserved.**
    ```
 4. `GENERATE_REVIEW_PROMPT(extra_context: {CONFLICT_CONTEXT: <above>})`
-5. Spawn: `Task(subagent_type: "ralph:wave-reviewer", model: "sonnet", description: "Resolve conflict: <STORY_ID>", prompt: <generated>)`
+5. Spawn: `Task(subagent_type: "ralph:wave-reviewer", description: "Resolve conflict: <STORY_ID>", prompt: <generated>)`
 6. **Parse report:**
    - **FIXED/CLEAN:** `TYPECHECK(on_fail: git reset --hard HEAD~1, treat as ESCALATE)`. On pass → `MARK_PASS(story)`.
    - **ESCALATE:** `ESCALATE_TO_COORDINATOR(conflict_context)`. Parse coordinator report:
@@ -400,7 +400,7 @@ For each deferred story (sequentially):
 **Skip if** fewer than 2 stories passed (including Phase A resolutions).
 
 1. `GENERATE_REVIEW_PROMPT(extra_context: {})` — empty `CONFLICT_CONTEXT` and `NEXT_WAVE_CONTEXT`
-2. Spawn: `Task(subagent_type: "ralph:wave-reviewer", model: "sonnet", description: "Review wave <N> consistency", prompt: <generated>)`
+2. Spawn: `Task(subagent_type: "ralph:wave-reviewer", description: "Review wave <N> consistency", prompt: <generated>)`
 3. **Parse report:**
    - **CLEAN:** log, continue.
    - **FIXED:** `TYPECHECK(on_fail: git reset --hard HEAD~1, treat as ESCALATE)`. On pass → log fixes, append to progress.txt.
@@ -427,7 +427,7 @@ For each deferred story (sequentially):
    Review the current codebase state after Wave <N> and prepare it for these upcoming stories. Use your judgment — typical bridge work includes installing new dependencies, creating shared scaffolding, setting up barrel files, or fixing anything that would cause redundant work across parallel workers.
    ```
 3. `GENERATE_REVIEW_PROMPT(extra_context: {NEXT_WAVE_CONTEXT: <above>})`
-4. Spawn: `Task(subagent_type: "ralph:wave-reviewer", model: "sonnet", description: "Bridge prep for wave <N+1>", prompt: <generated>)`
+4. Spawn: `Task(subagent_type: "ralph:wave-reviewer", description: "Bridge prep for wave <N+1>", prompt: <generated>)`
 5. **Parse report:**
    - **CLEAN:** log, continue.
    - **FIXED:** `TYPECHECK(on_fail: git reset --hard HEAD~1, log "Bridge prep failed typecheck, rolling back")`. On pass → log, append to progress.txt.
@@ -460,6 +460,7 @@ When all stories have `passes: true`:
 3. **Remediation depth cap** — `remediationDepth` capped at 2. Enforced in `CREATE_REMEDIATION`.
 4. **Worktree isolation** — only the assigned worker may `cd` into a worktree. The dispatcher creates/removes worktrees and merges branches from the feature branch root — never by entering the worktree directory.
 5. **Wave review serialization** — wave review and coordinator run sequentially — each must complete before the next wave begins. Never run reviews in parallel.
+6. **No model override** — do NOT set the `model` parameter when spawning subagents. Let each agent's definition (e.g., `wave-reviewer.md`, `ralph-worker.md`) control its own model.
 
 ---
 
