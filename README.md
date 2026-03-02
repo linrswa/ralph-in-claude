@@ -45,7 +45,7 @@ It works today, but there are still rough edges around hook scoping, subagent co
 │  │   US-006 (needs US-003, US-004) ── Wave 3                          │   │
 │  └────────────────────────────────────────────────────────────────────┘   │
 │                                                                           │
-│  ┌─ 2. Wave Execution ────────────────────────────────────────────────┐  │
+│  ┌─ 2. Wave Execution ─────────────────────────────────────────────────┐  │
 │  │                                                                     │  │
 │  │   Single-story wave → Direct mode (commit on feature branch)        │  │
 │  │   Multi-story wave  → Worktree mode (dispatcher-managed worktrees)  │  │
@@ -59,10 +59,10 @@ It works today, but there are still rough edges around hook scoping, subagent co
 │  │   └───────┬──────────┘  └───────┬──────────┘  └───────┬──────────┘  │  │
 │  │           └─────────────────────┼─────────────────────┘             │  │
 │  │                                 ▼                                   │  │
-│  │   ┌─ 3. Merge Pipeline (worktree mode) ───────────────────────┐    │  │
+│  │   ┌─ 3. Merge Pipeline (worktree mode) ────────────────────────┐    │  │
 │  │   │  Tier 1: git merge --no-ff (clean merge)                   │    │  │
 │  │   │  Tier 2: append-only auto-resolve                          │    │  │
-│  │   │  Tier 3: defer to wave review                               │    │  │
+│  │   │  Tier 3: defer to wave review                              │    │  │
 │  │   └────────────────────────────────────────────────────────────┘    │  │
 │  │                                 │                                   │  │
 │  │                                 ▼                                   │  │
