@@ -11,19 +11,13 @@ Packaged as a **Claude Code plugin** with three namespaced skills: `ralph:prd`, 
 
 ## 📰 Recent Updates
 
-**v0.4.0** — Post-wave code review system (Sonnet wave-reviewer + Opus wave-coordinator for escalation); switched from Task tool's `isolation: "worktree"` to dispatcher-managed worktrees — the platform's worktree isolation creates from stale refs, so Wave N+1 workers couldn't see Wave N's merged changes, causing them to redundantly re-implement previous work and then hit merge conflicts on the duplicated code; removed experimental conflict-resolver agent (Tier 3) in favor of the wave-reviewer/coordinator pipeline; orphan worktree cleanup at startup.
+**v0.4.4** — Added "no model override" constraint — dispatcher must not set the `model` parameter when spawning subagents; each agent definition controls its own model. Clarified phase/wave terminology: "phase" for PRD story grouping, "wave" reserved for `ralph:run` parallel execution.
 
-**v0.3.7** — Next-step prompts in `ralph:prd` and `ralph:convert` skills guide users through the workflow.
+**v0.4.1 ~ v0.4.3** — Simplified skills, agents, and prompt templates (~25% reduction); restored 8 lost specifications; added Phase C (bridge work) to wave review — prepares the codebase for the next wave's parallel workers; fixed dispatcher skipping Phase C for single-story and direct-mode waves.
 
-**v0.3.6** — PRD output centralized to `.ralph-in-claude/tasks/`; `ralph:convert` auto-detects PRD files from that directory.
+**v0.4.0** — Post-wave code review system (Sonnet wave-reviewer + Opus wave-coordinator for escalation); switched from Task tool's `isolation: "worktree"` to dispatcher-managed worktrees; removed experimental conflict-resolver agent (Tier 3) in favor of the wave-reviewer/coordinator pipeline; orphan worktree cleanup at startup.
 
-**v0.3.5** — Tightened prd.json schema validation.
-
-**v0.3.4** — Default max parallel agents increased from 3 to 5.
-
-**v0.3.2 ~ v0.3.3** — Switched ralph-worker model from Opus to Sonnet for better cost/speed balance.
-
-**v0.3.0 ~ v0.3.1** — Worktree isolation for parallel workers. Added `sharedFiles` / `conflictStrategy` fields to prd.json, append-only conflict auto-resolve.
+See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
 ## 💡 Motivation
 
