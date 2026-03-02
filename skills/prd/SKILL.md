@@ -54,6 +54,8 @@ Each story needs:
 
 Each story should be small enough to implement in one focused session.
 
+**Terminology:** When grouping stories into sequential stages (e.g., schema first, then backend, then UI), use the word **"phase"** (Phase 1, Phase 2, etc.). Do NOT use "wave" — that term is reserved for `ralph:run`'s parallel execution scheduling.
+
 **Format:**
 ```markdown
 ### US-001: [Title]
