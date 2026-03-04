@@ -117,32 +117,50 @@ The original approach: each iteration is a fresh Claude instance with no shared 
 - `jq` installed (`brew install jq` / `apt install jq`)
 - A git repository for your project
 
-### Install as Plugin
+### Option A: Install from GitHub (Recommended)
 
-1. Register the local marketplace (if not already done):
-
-```bash
-# From Claude Code, run:
-/plugin marketplace add /path/to/your/marketplace
-```
-
-2. Install the ralph plugin:
+This repo ships its own `marketplace.json`, so it works as a standalone marketplace:
 
 ```bash
-/plugin install ralph@local
+# 1. Add the marketplace
+/plugin marketplace add linrswa/ralph-in-claude
+
+# 2. Install the plugin
+/plugin install ralph@ralph-marketplace
 ```
 
-3. Enable in `~/.claude/settings.json`:
+### Option B: Add to Your Own Marketplace
+
+If you maintain a personal marketplace repo (e.g. `your-org/claude-plugins`), add Ralph as a plugin entry in your `marketplace.json`:
 
 ```json
 {
-  "enabledPlugins": {
-    "ralph@local": true
-  }
+  "name": "my-marketplace",
+  "plugins": [
+    {
+      "name": "ralph",
+      "source": {
+        "source": "github",
+        "repo": "linrswa/ralph-in-claude"
+      },
+      "description": "Autonomous agent system that implements features from PRDs via parallel subagent workers",
+      "version": "0.4.4",
+      "author": { "name": "linrswa" }
+    }
+  ]
 }
 ```
 
-This enables `/ralph:prd`, `/ralph:convert`, and `/ralph:run` commands in any project.
+Then install from your marketplace:
+
+```bash
+/plugin marketplace add your-org/claude-plugins
+/plugin install ralph@my-marketplace
+```
+
+### After Installation
+
+Both methods enable `/ralph:prd`, `/ralph:convert`, and `/ralph:run` commands in any project.
 
 ## 🚀 Workflow
 
@@ -193,6 +211,7 @@ Spawns one fresh Claude instance per story, sequentially. Useful for CI/headless
 ralph-in-claude/
 ├── .claude-plugin/
 │   └── plugin.json                     # Plugin manifest
+├── marketplace.json                    # Standalone marketplace definition
 ├── agents/
 │   ├── ralph-worker.md                 # Worker agent definition (shipped with plugin)
 │   ├── wave-reviewer.md                # Sonnet agent — post-wave consistency review
