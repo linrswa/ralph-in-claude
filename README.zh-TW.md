@@ -21,7 +21,7 @@
 
 ## 💡 緣起
 
-原版 [Ralph](https://github.com/snarktank/ralph) 是為 Amp 打造的——一個自主迴圈，從 PRD 撈出 story 逐一實作，每次都用全新的 context 來避免上下文耗盡。這個專案最初是該模式的 Claude Code 移植版（簡單的 bash 迴圈），現在正利用 Claude Code 的原生 agentic 工具（Task 系統、Skills、Hooks、外掛市集）演進為**依賴感知的平行執行**和**schema 驗證的資料完整性**。
+原版 [Ralph](https://github.com/snarktank/ralph) 是為 Amp 打造的 —— 一個自主迴圈，從 PRD 撈出 story 逐一實作，每次都用全新的 context 來避免上下文耗盡。這個專案最初是該模式的 Claude Code 移植版（簡單的 bash 迴圈），現在正利用 Claude Code 的原生 agentic 工具（Task 系統、Skills、Hooks、外掛市集）演進為**依賴感知的平行執行**和**schema 驗證的資料完整性**。
 
 能用，但 hook 作用域、子代理協作、錯誤恢復等方面還有粗糙的地方。持續迭代中。
 
