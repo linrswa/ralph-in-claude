@@ -2,18 +2,21 @@
   "name": "ralph-marketplace",
   "owner": {
     "name": "linrswa",
-    "url": "https://github.com/linrswa"
+    "email": ""
   },
-  "description": "Ralph autonomous agent system for Claude Code",
+  "metadata": {
+    "description": "Ralph autonomous agent system for Claude Code — implements features from PRDs via parallel subagent workers"
+  },
   "plugins": [
     {
       "name": "ralph",
-      "source": ".",
+      "source": "./",
       "description": "Autonomous agent system that implements features from PRDs via parallel subagent workers",
       "version": "0.4.4",
       "author": { "name": "linrswa" },
       "license": "MIT",
-      "keywords": ["prd", "autonomous-agent", "parallel-execution", "code-generation"]
+      "keywords": ["prd", "autonomous-agent", "parallel-execution", "code-generation"],
+      "category": "productivity"
     }
   ]
 }
