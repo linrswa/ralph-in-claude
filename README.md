@@ -117,50 +117,17 @@ The original approach: each iteration is a fresh Claude instance with no shared 
 - `jq` installed (`brew install jq` / `apt install jq`)
 - A git repository for your project
 
-### Option A: Install from GitHub (Recommended)
-
-This repo ships its own `marketplace.json`, so it works as a standalone marketplace:
+### Install from Marketplace
 
 ```bash
-# 1. Add the marketplace
-/plugin marketplace add linrswa/ralph-in-claude
+# Add the marketplace
+claude plugin marketplace add linrswa/ralph-in-claude
 
-# 2. Install the plugin
-/plugin install ralph@ralph-marketplace
+# Install the plugin
+claude plugin install ralph@ralph-in-claude
 ```
 
-### Option B: Add to Your Own Marketplace
-
-If you maintain a personal marketplace repo (e.g. `your-org/claude-plugins`), add Ralph as a plugin entry in your `marketplace.json`:
-
-```json
-{
-  "name": "my-marketplace",
-  "plugins": [
-    {
-      "name": "ralph",
-      "source": {
-        "source": "github",
-        "repo": "linrswa/ralph-in-claude"
-      },
-      "description": "Autonomous agent system that implements features from PRDs via parallel subagent workers",
-      "version": "0.4.4",
-      "author": { "name": "linrswa" }
-    }
-  ]
-}
-```
-
-Then install from your marketplace:
-
-```bash
-/plugin marketplace add your-org/claude-plugins
-/plugin install ralph@my-marketplace
-```
-
-### After Installation
-
-Both methods enable `/ralph:prd`, `/ralph:convert`, and `/ralph:run` commands in any project.
+This enables `/ralph:prd`, `/ralph:convert`, and `/ralph:run` commands in any project.
 
 ## 🚀 Workflow
 
@@ -210,32 +177,38 @@ Spawns one fresh Claude instance per story, sequentially. Useful for CI/headless
 ```
 ralph-in-claude/
 ├── .claude-plugin/
-│   └── plugin.json                     # Plugin manifest
-├── marketplace.json                    # Standalone marketplace definition
-├── agents/
-│   ├── ralph-worker.md                 # Worker agent definition (shipped with plugin)
-│   ├── wave-reviewer.md                # Sonnet agent — post-wave consistency review
-│   └── wave-coordinator.md             # Opus agent — escalated wave issue resolution
-├── hooks/
-│   └── hooks.json                      # Plugin-level PreToolUse hooks (prd.json validation)
-├── scripts/
-│   ├── ensure-ralph-dir.sh             # Hook: auto-creates .ralph-in-claude/ dir
-│   └── validate-prd-write.sh           # Hook: validates prd.json schema (9 checks)
-├── skills/
-│   ├── prd/
-│   │   └── SKILL.md                    # ralph:prd — PRD generator
-│   ├── convert/
-│   │   └── SKILL.md                    # ralph:convert — PRD-to-JSON converter
-│   └── run/
-│       ├── SKILL.md                    # ralph:run — parallel dispatcher
-│       └── references/
-│           ├── subagent-prompt-template.md  # Worker prompt (dynamic context only)
-│           ├── wave-review-prompt-template.md       # Wave reviewer prompt
-│           └── wave-coordinator-prompt-template.md  # Wave coordinator prompt
-├── docs/
-│   ├── plan.md                         # Native Plugin design document
-│   └── WIP.md                          # Open issues & backlog
-├── CLAUDE.md                           # Project instructions (auto-read by Claude Code)
+│   └── marketplace.json                # Marketplace definition (source: ./plugins/ralph)
+├── plugins/
+│   └── ralph/                          # Plugin root (installed by marketplace)
+│       ├── .claude-plugin/
+│       │   └── plugin.json             # Plugin manifest
+│       ├── .claude/
+│       │   └── settings.json           # Plugin permissions
+│       ├── agents/
+│       │   ├── ralph-worker.md         # Worker agent definition
+│       │   ├── wave-reviewer.md        # Sonnet agent — post-wave consistency review
+│       │   └── wave-coordinator.md     # Opus agent — escalated wave issue resolution
+│       ├── hooks/
+│       │   └── hooks.json              # Plugin-level PreToolUse hooks (prd.json validation)
+│       ├── scripts/
+│       │   ├── ensure-ralph-dir.sh     # Hook: auto-creates .ralph-in-claude/ dir
+│       │   └── validate-prd-write.sh   # Hook: validates prd.json schema (9 checks)
+│       ├── skills/
+│       │   ├── prd/
+│       │   │   └── SKILL.md            # ralph:prd — PRD generator
+│       │   ├── convert/
+│       │   │   └── SKILL.md            # ralph:convert — PRD-to-JSON converter
+│       │   └── run/
+│       │       ├── SKILL.md            # ralph:run — parallel dispatcher
+│       │       └── references/
+│       │           ├── subagent-prompt-template.md
+│       │           ├── wave-review-prompt-template.md
+│       │           └── wave-coordinator-prompt-template.md
+│       └── CLAUDE.md                   # Plugin instructions (auto-read by Claude Code)
+├── docs/                               # Dev-only documentation
+├── CHANGELOG.md
+├── LICENSE
+├── README.md
 ├── ralph.sh                            # Bash Loop fallback
 └── prompt.md                           # Bash Loop worker prompt
 ```

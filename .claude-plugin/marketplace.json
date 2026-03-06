@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "ralph",
-      "source": "./",
+      "source": "./plugins/ralph",
       "description": "Autonomous agent system that implements features from PRDs via parallel subagent workers",
       "version": "0.4.4",
       "author": { "name": "linrswa" },
