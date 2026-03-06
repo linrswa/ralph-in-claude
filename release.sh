@@ -2,7 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PLUGIN_JSON="$SCRIPT_DIR/.claude-plugin/plugin.json"
+PLUGIN_JSON="$SCRIPT_DIR/plugins/ralph/.claude-plugin/plugin.json"
+MARKETPLACE_JSON="$SCRIPT_DIR/.claude-plugin/marketplace.json"
 
 usage() {
   cat <<EOF
@@ -103,8 +104,9 @@ fi
 # --- Execute ---
 cd "$SCRIPT_DIR"
 
-sed -i "s/\"version\": *\"$current\"/\"version\": \"$next\"/" "$PLUGIN_JSON"
-git add .claude-plugin/plugin.json
+sed -i '' "s/\"version\": *\"$current\"/\"version\": \"$next\"/" "$PLUGIN_JSON"
+sed -i '' "s/\"version\": *\"$current\"/\"version\": \"$next\"/" "$MARKETPLACE_JSON"
+git add plugins/ralph/.claude-plugin/plugin.json .claude-plugin/marketplace.json
 git commit -m "chore: bump version to $next"
 git tag "v$next"
 git push
