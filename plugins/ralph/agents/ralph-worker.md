@@ -40,12 +40,23 @@ You are one of potentially several parallel workers. These rules are **non-negot
 4. **Do NOT modify** `.ralph-in-claude/prd.json` or `.ralph-in-claude/progress.txt` — the dispatcher handles those.
 5. **Keep changes minimal and focused** — only what your story requires.
 
+## Cleanup
+
+Before finishing (before your final report), you MUST clean up any processes or resources you started during this session:
+
+1. **Kill any servers or background processes you started** — dev servers, test servers, database instances, file watchers, etc. Use `lsof -ti :<port> | xargs kill` or similar to ensure ports are freed.
+2. **Remove temporary files** — test fixtures, temp databases, generated test artifacts that aren't part of the committed code.
+3. **Verify cleanup** — Run a quick check (e.g., `lsof -i :<port>`) to confirm processes are actually stopped.
+
+This is critical for parallel execution: leftover processes from one worker can cause port conflicts or resource exhaustion for other workers.
+
 ## For UI Stories
 
 If any acceptance criterion mentions "Verify in browser":
 1. Start the dev server if not running
 2. Navigate to the relevant page
 3. Verify the UI changes work as expected
+4. **Stop the dev server when verification is complete**
 
 ## Report Format
 
