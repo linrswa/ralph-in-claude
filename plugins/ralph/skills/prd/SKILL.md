@@ -1,6 +1,6 @@
 ---
 name: prd
-description: "Generate a Product Requirements Document (PRD) for a new feature. Use when planning a feature, starting a new project, or when asked to create a PRD. Triggers on: create a prd, write prd for, plan this feature, requirements for, spec out."
+description: "Generate a Product Requirements Document (PRD) for a new feature or project. Use when planning features, defining requirements, or speccing out work."
 argument-hint: "[feature-description]"
 ---
 
@@ -13,15 +13,17 @@ Create detailed Product Requirements Documents that are clear, actionable, and s
 ## The Job
 
 1. Receive a feature description from the user
-2. Ask 3-5 essential clarifying questions (with lettered options)
+2. Ask only the clarifying questions necessary — typically 2-5 (with lettered options). Skip questions the user's initial description already answers.
 3. Generate a structured PRD based on answers
-4. Save to `.ralph-in-claude/tasks/prd-[feature-name].md`
+4. Save to `.ralph-in-claude/tasks/prd-[feature-slug].md`
 
 **Important:** Do NOT start implementing. Just create the PRD.
 
 ---
 
 ## Step 1: Clarifying Questions
+
+If no feature description is provided (user just typed `/ralph:prd` with no arguments), use `AskUserQuestion` to ask the user to describe the feature before proceeding.
 
 Ask only critical questions where the initial prompt is ambiguous. Focus on:
 
@@ -80,7 +82,8 @@ Be explicit and unambiguous.
 ### 5. Non-Goals (Out of Scope)
 What this feature will NOT include. Critical for managing scope.
 
-### 6. Technical & Design Considerations (Optional)
+### 6. Technical & Design Considerations
+Include if any technical constraints, UI requirements, or integration points are known. If none are apparent, write "None identified" rather than omitting the section.
 - UI/UX requirements, mockups, existing components to reuse
 - Known constraints, dependencies, integration points, performance requirements
 
@@ -91,6 +94,10 @@ How will success be measured?
 
 ### 8. Open Questions
 Remaining questions or areas needing clarification.
+
+### Non-Feature Requests
+
+If the request is a refactor, migration, or infrastructure task rather than a user-facing feature, adapt the template: use a task breakdown instead of User Stories, and omit Success Metrics if they don't apply.
 
 ## Writing for Junior Developers
 
@@ -112,6 +119,12 @@ Before saving the PRD:
 
 ## Next Step
 
-Save as `.ralph-in-claude/tasks/prd-[feature-name].md`, then tell the user:
+Before writing, ensure `.ralph-in-claude/tasks/` exists (create it if needed).
+
+Slugify the feature name to lowercase-kebab-case, max 4-5 words. E.g., `prd-csv-export.md`, not `prd-Add a button that lets users export their data as CSV.md`.
+
+If a file with the same slug already exists, notify the user and use `AskUserQuestion` to ask whether to overwrite or rename.
+
+Save as `.ralph-in-claude/tasks/prd-[feature-slug].md`, then tell the user:
 
 > PRD saved. Next step: run `/ralph:convert` to convert it to prd.json for execution.

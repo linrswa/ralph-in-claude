@@ -1,10 +1,8 @@
 ---
 name: run
-description: "Run Ralph to implement all stories from prd.json. Orchestrates parallel subagent workers. Use when asked to 'run ralph', 'execute the prd', 'start ralph', 'implement all stories'."
+description: "Run Ralph to implement all stories from prd.json. Orchestrates parallel subagent workers in dependency-aware waves. Use when asked to 'run ralph', 'start ralph', or 'implement all stories from prd.json'."
 argument-hint: "[prd-path] [max-agents]"
-# Hooks moved to plugin-level hooks/hooks.json (SKILL.md hooks don't fire for
-# marketplace plugins — see GitHub Issue #17688). When the bug is fixed,
-# hooks can be moved back here for skill-scoped execution.
+# hooks: see plugin-level hooks/hooks.json
 ---
 
 # Ralph Dispatcher — Parallel Story Execution
@@ -25,6 +23,10 @@ npm run typecheck  # or tsc --noEmit, cargo check, etc.
 ```
 If the project has no typecheck tooling, skip — counts as passed.
 On failure, execute the `on_fail` action specified at the call site.
+
+### TIMESTAMP()
+
+Run `date +"%Y-%m-%dT%H:%M:%S%z"` — use local time, not UTC.
 
 ### CLEANUP_WORKTREE(story)
 
@@ -123,15 +125,16 @@ Options:
 ## 1. Initialization
 
 1. **Read prd.json** at the path determined in §0.
-2. **Read `.ralph-in-claude/progress.txt`** if it exists — extract the `## Codebase Patterns` section for passing to workers.
-3. **Read the source PRD** from the `sourcePrd` field for additional context.
-4. **Read `conflictStrategy`** from prd.json (defaults to `"conservative"` if absent). Log which mode is active:
+2. **Verify all required template files exist:** `references/subagent-prompt-template.md`, `references/wave-review-prompt-template.md`, `references/wave-coordinator-prompt-template.md`. If any are missing, report the specific missing files to the user and stop.
+3. **Read `.ralph-in-claude/progress.txt`** if it exists — extract the `## Codebase Patterns` section for passing to workers.
+4. **Read the source PRD** from the `sourcePrd` field for additional context.
+5. **Read `conflictStrategy`** from prd.json (defaults to `"conservative"` if absent). Log which mode is active:
    - `"conservative"` — all sharedFiles overlaps defer to separate waves (maximum safety)
    - `"optimistic"` — only `structural-modify` overlaps defer; `append-only` overlaps run in parallel
-5. **Check git branch** — ensure you're on the branch specified by `branchName`. If not:
+6. **Check git branch** — ensure you're on the branch specified by `branchName`. If not:
    - If the branch exists: `git checkout <branchName>`
    - If not: `git checkout -b <branchName>` from `baseBranch` (default: `main`)
-6. **Clean up orphan worktrees** from crashed previous runs:
+7. **Clean up orphan worktrees** from crashed previous runs:
    ```bash
    if [ -d ".ralph-in-claude/worktrees" ]; then
      for wt in .ralph-in-claude/worktrees/*/; do
@@ -141,8 +144,8 @@ Options:
    git worktree prune
    git branch --list 'ralph-worker-*' | xargs -r git branch -D
    ```
-7. **Initialize `storyIdToTaskId`** — internal mapping from story IDs (e.g., `"US-001"`) to TaskCreate-returned task IDs.
-8. **Write `.ralph-in-claude/state.json`** — powers the WebGUI Kanban view. Schema (used throughout, updated at wave boundaries):
+8. **Initialize `storyIdToTaskId`** — internal mapping from story IDs (e.g., `"US-001"`) to TaskCreate-returned task IDs.
+9. **Write `.ralph-in-claude/state.json`** — powers the WebGUI Kanban view. Schema (used throughout, updated at wave boundaries):
    ```json
    {
      "status": "running | completed",
@@ -165,7 +168,15 @@ Options:
      "lastUpdated": "<timestamp>"
    }
    ```
-   Use `date +"%Y-%m-%dT%H:%M:%S%z"` for all timestamps. Initialize with `status: "running"`, `currentWave: 0`, empty `workers` and `failedStories`.
+   Use `TIMESTAMP()` for all timestamp fields. Initialize with `status: "running"`, `currentWave: 0`, empty `workers` and `failedStories`.
+
+10. **Subagent types reference:**
+
+    | Subagent Type | Definition File | Purpose |
+    |---|---|---|
+    | ralph:ralph-worker | agents/ralph-worker.md | Implements a single story |
+    | ralph:wave-reviewer | agents/wave-reviewer.md | Post-wave review & conflict resolution |
+    | ralph:wave-coordinator | agents/wave-coordinator.md | Escalated issue resolution |
 
 ---
 
@@ -233,7 +244,7 @@ Repeat until all stories have `passes: true` or all remaining stories are blocke
 
 **First, rebuild `storyIdToTaskId` from TaskList** (done every wave to survive context compaction):
 1. Call `TaskList` to get all tasks
-2. For each task, parse `subject` (format: `US-001: Title`) — extract story ID before `:`, map to task ID
+2. For each task, parse `subject` field to extract story ID — match both `US-NNN` and `US-REM-NNN` formats (everything before the first `:`), map to task ID
 
 **Then, determine retry counts** by reading prd.json and counting `"Attempt N failed:"` entries in each story's `notes` field.
 
@@ -271,6 +282,7 @@ From ready stories:
 ```bash
 git worktree add .ralph-in-claude/worktrees/<STORY_ID> -b ralph-worker-<STORY_ID> HEAD
 ```
+If `git worktree add` fails because the worktree or branch already exists, remove it first with `git worktree remove --force .ralph-in-claude/worktrees/<STORY_ID>` and `git branch -D ralph-worker-<STORY_ID>`, then retry once.
 
 **3. Track dispatch info** per story: `{storyId, mode, branch, worktreePath}`
 
@@ -311,127 +323,15 @@ For each story in wave:
 
 ### 3.4 Verify Results & Merge (Four-Tier Pipeline)
 
-**Capture wave-start commit before processing:**
-```bash
-WAVE_START_COMMIT=$(git rev-parse HEAD)
-```
+When all subagents return, process each story sequentially through the four-tier merge pipeline: Tier 1 (clean merge), Tier 2 (append-only auto-resolve), Tier 3 (defer to wave review), and FAIL handling. In direct mode, typecheck failure triggers a hard reset and FAIL — Tiers 2/3 do not apply.
 
-When all subagents return, process each story **sequentially** (to serialize merges). Merge stories one at a time, never in parallel. Look up dispatch info from §3.3.
-
-For each completed worker:
-
-1. **Parse subagent report** — extract: Status (PASS/FAIL), Commit hash, Files changed, Summary, Learnings.
-
-2. **If PASS:**
-
-   a. `TYPECHECK(on_fail: see Note below)`
-
-   b. **Merge** (mode-dependent):
-      - **Direct:** skip merge — verify commit hash matches HEAD via `git log -1 --format=%H`
-      - **Worktree:** `git -c merge.conflictStyle=diff3 merge --no-ff ralph-worker-<STORY_ID> -m "feat: <STORY_ID> - <STORY_TITLE>"`
-
-   c. **Tier 1 — Clean merge:** `MARK_PASS(story)`. Continue to next story.
-
-   **Note:** Tiers 2–3 only apply in **worktree mode**. In **direct mode**, if typecheck fails: `git reset --hard HEAD~1`, treat as FAIL (step 3).
-
-   d. **Tier 2 — Append-only auto-resolve:**
-      1. List conflicted files: `git diff --name-only --diff-filter=U`
-      2. Check if ALL hunks are append-only: the base section (between `|||||||` and `=======` markers from diff3) is empty for ALL hunks in ALL files
-      3. If yes: strip conflict markers (`<<<<<<<`, `|||||||`, `=======`, `>>>>>>>`), `git add <files>`, `git commit --no-edit`, log auto-resolve, `MARK_PASS(story)`
-      4. If any non-empty base → fall through to Tier 3
-
-   e. **Tier 3 — Defer to wave review:**
-      1. `git merge --abort`
-      2. **Do NOT call `CLEANUP_WORKTREE`** — worktree/branch needed for Phase A re-merge
-      3. Track: `deferredStories.push({storyId, storyTitle, branch, worktreePath, conflictedFiles, reason: "merge conflict"})`
-      4. Log deferral. Do NOT update task status — stays `in_progress`.
-
-3. **If FAIL** (worker reported FAIL or typecheck failed):
-   - Worktree mode: `CLEANUP_WORKTREE(story)`
-   - Direct mode (dirty state): `git checkout -- . && git clean -fd`
-   - `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "pending")`
-   - Append `"Attempt N failed: <reason>"` to story's `notes` in prd.json
-   - If retry count >= 3: report to user with all attempt reasons and suggest: split the story, add implementation notes, or skip. Error report format by scenario:
-     - **Retry exhaustion:** list each attempt number + actions taken + failure reason
-     - **Cycle detection:** list the story IDs forming the cycle (e.g., `US-003 → US-005 → US-003`)
-     - **Blocked stories:** list each blocked story ID with its unmet `dependsOn` IDs
-
-**After each story result**, update state.json: set worker `status`/`completedAt`, add to `failedStories` if failed, update `lastUpdated`.
+Read `references/merge-pipeline.md` for the full four-tier merge pipeline.
 
 ### 3.5 Wave Review (Conflict Resolution + Consistency Check + Bridge Work)
 
-**Do NOT skip this section based on wave size or mode.** Each phase has its own skip condition — you MUST evaluate all three phases (A, B, C) independently, even for single-story or direct-mode waves. Phase C (bridge work) commonly applies to single-story waves.
+After the merge pipeline, evaluate all three wave review phases independently — do not skip based on wave size or mode. Phase A resolves deferred merge conflicts via wave-reviewer (and coordinator escalation if needed). Phase B checks cross-story consistency when 2+ stories passed. Phase C prepares bridge work for the next wave's stories.
 
-#### Phase A: Conflict Resolution
-
-**Skip if** `deferredStories` is empty.
-
-For each deferred story (sequentially):
-
-1. Re-merge: `git -c merge.conflictStyle=diff3 merge --no-ff <branch> -m "feat: <STORY_ID> - <STORY_TITLE>"`
-2. Capture conflicted files: `git diff --name-only --diff-filter=U`
-3. Build `{{CONFLICT_CONTEXT}}`:
-   ```markdown
-   ## Conflict Resolution Task
-
-   A merge conflict occurred when merging story **<STORY_ID>: <STORY_TITLE>** into the feature branch.
-
-   **Story details:**
-   - **ID:** <STORY_ID>
-   - **Title:** <STORY_TITLE>
-   - **Description:** <STORY_DESCRIPTION>
-   - **Acceptance Criteria:** <formatted criteria list>
-
-   **Conflicted files:** <list>
-
-   **Your primary task:** Resolve the merge conflict in the working tree.
-   **Both sides' functionality must be preserved.**
-   ```
-4. `GENERATE_REVIEW_PROMPT(extra_context: {CONFLICT_CONTEXT: <above>})`
-5. Spawn: `Task(subagent_type: "ralph:wave-reviewer", description: "Resolve conflict: <STORY_ID>", prompt: <generated>)`
-6. **Parse report:**
-   - **FIXED/CLEAN:** `TYPECHECK(on_fail: git reset --hard HEAD~1, treat as ESCALATE)`. On pass → `MARK_PASS(story)`.
-   - **ESCALATE:** `ESCALATE_TO_COORDINATOR(conflict_context)`. Parse coordinator report:
-     - **FIXED:** `TYPECHECK(on_fail: git reset --hard HEAD~1, treat as REMEDIATION)`. On pass → `MARK_PASS(story)`.
-     - **REMEDIATION/FAIL:** `CREATE_REMEDIATION(story, context)`
-
-#### Phase B: Consistency Review
-
-**Skip if** fewer than 2 stories passed (including Phase A resolutions).
-
-1. `GENERATE_REVIEW_PROMPT(extra_context: {})` — empty `CONFLICT_CONTEXT` and `NEXT_WAVE_CONTEXT`
-2. Spawn: `Task(subagent_type: "ralph:wave-reviewer", description: "Review wave <N> consistency", prompt: <generated>)`
-3. **Parse report:**
-   - **CLEAN:** log, continue.
-   - **FIXED:** `TYPECHECK(on_fail: git reset --hard HEAD~1, treat as ESCALATE)`. On pass → log fixes, append to progress.txt.
-   - **ESCALATE:** `ESCALATE_TO_COORDINATOR(conflict_context: "")`. Parse coordinator report:
-     - **FIXED:** `TYPECHECK(on_fail: git reset --hard HEAD~1, treat as REMEDIATION)`. On pass → log.
-     - **REMEDIATION:** create `US-REM-NNN` stories in prd.json (`dependsOn` current wave's passed stories), create tasks with `TaskCreate`, wire dependencies.
-
-#### Phase C: Bridge Work
-
-**Skip if:** all stories pass (no next wave) OR no stories are ready for the next wave.
-
-1. Peek at Wave N+1 — identify ready stories using §3.1 logic on updated prd.json. Gather each story's id, title, description, acceptance criteria, sharedFiles.
-2. Build `{{NEXT_WAVE_CONTEXT}}`:
-   ```markdown
-   ## Bridge Work — Prepare for Wave <N+1>
-
-   The following stories are ready for the next wave and will be implemented in parallel by worker agents:
-
-   <for each upcoming story:>
-   - **<STORY_ID>: <STORY_TITLE>** — <STORY_DESCRIPTION>
-     Acceptance criteria: <formatted criteria list>
-     Shared files: <sharedFiles list or "none">
-
-   Review the current codebase state after Wave <N> and prepare it for these upcoming stories. Use your judgment — typical bridge work includes installing new dependencies, creating shared scaffolding, setting up barrel files, or fixing anything that would cause redundant work across parallel workers.
-   ```
-3. `GENERATE_REVIEW_PROMPT(extra_context: {NEXT_WAVE_CONTEXT: <above>})`
-4. Spawn: `Task(subagent_type: "ralph:wave-reviewer", description: "Bridge prep for wave <N+1>", prompt: <generated>)`
-5. **Parse report:**
-   - **CLEAN:** log, continue.
-   - **FIXED:** `TYPECHECK(on_fail: git reset --hard HEAD~1, log "Bridge prep failed typecheck, rolling back")`. On pass → log, append to progress.txt.
-   - **ESCALATE:** Do NOT escalate to coordinator. Log `"Bridge prep skipped (reviewer escalated)"`.
+Read `references/wave-review-process.md` for Phase A (conflict resolution), Phase B (consistency review), and Phase C (bridge work).
 
 ### 3.6 Loop
 
@@ -461,6 +361,8 @@ When all stories have `passes: true`:
 4. **Worktree isolation** — only the assigned worker may `cd` into a worktree. The dispatcher creates/removes worktrees and merges branches from the feature branch root — never by entering the worktree directory.
 5. **Wave review serialization** — wave review and coordinator run sequentially — each must complete before the next wave begins. Never run reviews in parallel.
 6. **No model override** — do NOT set the `model` parameter when spawning subagents. Let each agent's definition (e.g., `wave-reviewer.md`, `ralph-worker.md`) control its own model.
+7. **Task tool error handling** — if any TaskCreate or TaskUpdate call fails, stop the current wave, report the error to the user, and do not proceed. Do not attempt to recover silently.
+8. **Subagent timeout** — if a subagent does not return within a reasonable timeframe, treat it as a FAIL with reason "worker timeout".
 
 ---
 

@@ -1,10 +1,8 @@
 ---
 name: convert
-description: "Convert PRDs to prd.json format for the Ralph autonomous agent system. Use when you have an existing PRD and need to convert it to Ralph's JSON format. Triggers on: convert this prd, turn this into ralph format, create prd.json from this, ralph json."
+description: "Convert an existing PRD document into Ralph's prd.json execution format. Use when you have a PRD and need to prepare it for Ralph's autonomous execution."
 argument-hint: "[prd-file-path]"
-# Hooks moved to plugin-level hooks/hooks.json (SKILL.md hooks don't fire for
-# marketplace plugins — see GitHub Issue #17688). When the bug is fixed,
-# hooks can be moved back here for skill-scoped execution.
+# hooks: see plugin-level hooks/hooks.json
 ---
 
 # Ralph PRD Converter
@@ -23,13 +21,24 @@ Converts existing PRDs to the prd.json format that Ralph uses for autonomous exe
      - **0 files found** → tell the user to run `/ralph:prd` first, then stop
      - **1 file found** → auto-select it and confirm to the user (e.g., "Found `.ralph-in-claude/tasks/prd-foo.md` — using that.")
      - **2+ files found** → use the `AskUserQuestion` tool with the file list as options so the user can pick one
-2. **Ask the user to confirm the `baseBranch`** using the `AskUserQuestion` tool. Provide options based on:
-   - The current git branch (check with `git branch --show-current`)
-   - `main` branch
-   - Other common branches if relevant
-3. **Extract implementation details** from the PRD (architecture decisions, APIs, data structures, code patterns) and include them in relevant story `notes` fields
-4. **Record the source PRD path** in `sourcePrd` field so Ralph can reference it during implementation
-5. Write the output to `.ralph-in-claude/prd.json` (the hook auto-creates the `.ralph-in-claude/` directory)
+2. **Validate the input file:**
+   - Read the file and verify it contains PRD-like content (user stories, requirements, features).
+   - If the file is **empty**, inform the user and stop.
+   - If the file is **already a prd.json** (valid JSON with `userStories` array), tell the user it is already converted and stop.
+   - If the file has **no actionable requirements** (no user stories, features, or functional requirements), stop and explain what is missing.
+3. **Confirm the `baseBranch`:**
+   - Check the current branch with `git branch --show-current`.
+   - If the current branch is `main` or `master`, default to it and inform the user (e.g., "Using `main` as baseBranch.") without requiring confirmation.
+   - If the current branch is a feature branch or there is ambiguity, use the `AskUserQuestion` tool with options including the current branch, `main`, and other relevant branches.
+4. **Extract implementation details** from the PRD (architecture decisions, APIs, data structures, code patterns) and include them in relevant story `notes` fields
+5. **Record the source PRD path** in `sourcePrd` field so Ralph can reference it during implementation
+6. **Validate the generated JSON** before writing:
+   - Verify the JSON is syntactically valid.
+   - Verify all `dependsOn` references point to existing story IDs within this PRD.
+   - Verify the dependency graph is acyclic (perform a topological sort; if it fails, there is a cycle -- fix before proceeding).
+   - If validation fails, fix the issues before writing.
+7. **Check for existing prd.json:** If `.ralph-in-claude/prd.json` already exists, warn the user and ask for confirmation before overwriting using `AskUserQuestion`.
+8. Write the output to `.ralph-in-claude/prd.json` (the hook auto-creates the `.ralph-in-claude/` directory)
 
 ---
 
@@ -69,7 +78,7 @@ Converts existing PRDs to the prd.json format that Ralph uses for autonomous exe
 
 ---
 
-> *For story sizing guidelines, see CLAUDE.md "Story Sizing" section.*
+> **Story sizing:** Each story should be completable by a single agent in one iteration -- roughly 1-3 files changed.
 
 ---
 
@@ -118,27 +127,9 @@ Always end with `"Typecheck passes"`; add `"Tests pass"` for testable logic, `"V
 
 ## Conflict Analysis
 
-When populating `sharedFiles`, classify each entry's `conflictType` using these rules:
+Classify each `sharedFiles` entry as `append-only` (new independent content) or `structural-modify` (changes existing code). When uncertain, default to `structural-modify`. After classification, check for parallel unlock opportunities and structural conflicts across stories.
 
-### Classification Rules
-
-| File Type | Append-Only | Structural-Modify |
-|-----------|-------------|-------------------|
-| **Registry/barrel files** (index.ts, routes.ts) | Adding new imports, exports, or route registrations | Modifying existing imports or restructuring exports |
-| **Config files** (config.ts, env files) | Adding new config keys or sections | Changing existing config values or restructuring |
-| **Schema files** (schema.prisma, migrations) | Adding new models or tables | Modifying existing models (adding fields, changing types) |
-| **Shared utilities** (utils.ts, helpers.ts) | Adding new standalone functions | Modifying existing function signatures or logic |
-| **Package manifests** (package.json) | Adding new dependencies | Changing existing dependency versions or scripts |
-
-**When uncertain** → default to `structural-modify` (the conservative, safe choice).
-
-### Cross-Story Analysis
-
-After classifying all stories' shared files:
-
-1. **Check for unlock opportunities** — if multiple same-priority stories share a file and ALL declare `append-only`, they can run in parallel with `conflictStrategy: "optimistic"`. Note this as a recommendation.
-2. **Check for structural conflicts** — if two same-priority stories both declare `structural-modify` for the same file AND neither depends on the other, consider suggesting a split or adding a dependency to enforce ordering.
-3. **Set conflictStrategy** — if the majority of shared-file overlaps are `append-only` (e.g., 5 stories all appending to `src/index.ts`), set `conflictStrategy: "optimistic"` in the project-level JSON.
+For conflict classification rules, cross-story analysis steps, and strategy recommendations, read `references/conflict-analysis.md`.
 
 ---
 
@@ -165,6 +156,7 @@ Add ability to mark tasks with different statuses.
   "baseBranch": "main",
   "sourcePrd": "docs/prd/task-status.md",
   "description": "Task Status Feature - Track task progress with status indicators",
+  "conflictStrategy": "conservative",
   "userStories": [
     {
       "id": "US-001",
@@ -262,5 +254,4 @@ Before writing prd.json, verify:
 
 After saving prd.json, tell the user:
 
-> prd.json saved. Next step: run `/ralph:run` to start execution.
-> To use more parallel agents, add a number: `/ralph:run .ralph-in-claude/prd.json 8`
+> prd.json saved. Review the generated stories, then run `/ralph:run` to start execution.
