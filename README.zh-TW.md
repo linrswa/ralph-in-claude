@@ -11,11 +11,11 @@
 
 ## 📰 近期更新
 
-**v0.4.4** — 新增「禁止覆蓋模型」約束——調度器不得在啟動子代理時設定 `model` 參數，由各 agent 定義檔自行控制模型。釐清 phase/wave 術語：PRD 中 story 的階段分組用「phase」，「wave」保留給 `ralph:run` 的平行執行排程。
+**v0.4.8** — 品質審查後改善三個技能；`ralph:prd` 和 `ralph:convert` 新增程式碼庫探索功能；優化 `ralph:run` 結構；新增外掛更新說明。
 
-**v0.4.1 ~ v0.4.3** — 精簡 skills、agents 與 prompt templates（約 25% 減量）；修復 8 項遺失的規格；新增波次審查 Phase C（bridge work）——為下一波平行 worker 準備程式碼庫；修復調度器在單 story 與 direct mode 波次跳過 Phase C 的問題。
+**v0.4.5 ~ v0.4.6** — 外掛檔案移至 `plugins/ralph/` 子目錄以支援乾淨的市集安裝；市集更名為 `ralph-in-claude`；ralph-worker agent 新增清理規則。
 
-**v0.4.0** — 波次後 code review 系統（Sonnet wave-reviewer + Opus wave-coordinator 升級處理）；從 Task tool 的 `isolation: "worktree"` 改為調度器自行管理 worktree；移除實驗性 conflict-resolver agent（Tier 3），改由 wave-reviewer/coordinator pipeline 處理；啟動時自動清理孤立 worktree。
+**v0.4.4** — 新增「禁止覆蓋模型」約束——調度器不得在啟動子代理時設定 `model` 參數，由各 agent 定義檔自行控制模型。釐清 phase/wave 術語。
 
 完整版本歷史請參閱 [CHANGELOG.md](CHANGELOG.md)。
 

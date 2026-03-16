@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented in this file.
 
+## v0.4.8
+
+- Fixed review issues in prd, convert, and run skills.
+- Added plugin update instructions to README.
+
+## v0.4.7
+
+- Improved all three ralph skills (`prd`, `convert`, `run`) based on quality review.
+
+## v0.4.6
+
+- Added cleanup rules to ralph-worker agent (remove debug artifacts, unused imports, etc.).
+
+## v0.4.5
+
+- Moved plugin files to `plugins/ralph/` sub-directory for clean marketplace install.
+- Renamed marketplace from `ralph-marketplace` to `ralph-in-claude`.
+- Added `marketplace.json` for plugin discovery.
+
 ## v0.4.4
 
 - Added "no model override" constraint — dispatcher must not set the `model` parameter when spawning subagents; each agent definition controls its own model.

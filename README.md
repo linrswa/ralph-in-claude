@@ -11,11 +11,11 @@ Packaged as a **Claude Code plugin** with three namespaced skills: `ralph:prd`, 
 
 ## 📰 Recent Updates
 
-**v0.4.4** — Added "no model override" constraint — dispatcher must not set the `model` parameter when spawning subagents; each agent definition controls its own model. Clarified phase/wave terminology: "phase" for PRD story grouping, "wave" reserved for `ralph:run` parallel execution.
+**v0.4.8** — Improved all three skills based on quality review; added codebase exploration to `ralph:prd` and `ralph:convert`; optimized `ralph:run` structure; added plugin update instructions.
 
-**v0.4.1 ~ v0.4.3** — Simplified skills, agents, and prompt templates (~25% reduction); restored 8 lost specifications; added Phase C (bridge work) to wave review — prepares the codebase for the next wave's parallel workers; fixed dispatcher skipping Phase C for single-story and direct-mode waves.
+**v0.4.5 ~ v0.4.6** — Moved plugin files to `plugins/ralph/` sub-directory for clean marketplace install; renamed marketplace to `ralph-in-claude`; added cleanup rules to ralph-worker agent.
 
-**v0.4.0** — Post-wave code review system (Sonnet wave-reviewer + Opus wave-coordinator for escalation); switched from Task tool's `isolation: "worktree"` to dispatcher-managed worktrees; removed experimental conflict-resolver agent (Tier 3) in favor of the wave-reviewer/coordinator pipeline; orphan worktree cleanup at startup.
+**v0.4.4** — Added "no model override" constraint — dispatcher must not set the `model` parameter when spawning subagents; each agent definition controls its own model. Clarified phase/wave terminology.
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
