@@ -129,6 +129,18 @@ claude plugin install ralph@ralph-in-claude
 
 This enables `/ralph:prd`, `/ralph:convert`, and `/ralph:run` commands in any project.
 
+### Update
+
+```bash
+# Update the marketplace to fetch latest versions
+claude plugin marketplace update ralph-in-claude
+
+# Update the plugin
+claude plugin update ralph@ralph-in-claude
+```
+
+> **Note:** You must update the marketplace first — it refreshes the plugin catalog from the repo. Then `plugin update` pulls in the new version. After updating, run `/reload-plugins` to pick up any hook or command changes.
+
 ## 🚀 Workflow
 
 **1. Create a PRD**

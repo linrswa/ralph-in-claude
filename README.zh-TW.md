@@ -129,6 +129,18 @@ claude plugin install ralph@ralph-in-claude
 
 安裝後即可在所有專案中使用 `/ralph:prd`、`/ralph:convert` 和 `/ralph:run` 指令。
 
+### 更新
+
+```bash
+# 更新市集以取得最新版本
+claude plugin marketplace update ralph-in-claude
+
+# 更新外掛
+claude plugin update ralph@ralph-in-claude
+```
+
+> **注意：** 必須先更新市集——這會從 repo 同步最新的外掛目錄。然後 `plugin update` 才能拉到新版本。更新後執行 `/reload-plugins` 以載入任何 hook 或指令的變更。
+
 ## 🚀 工作流程
 
 **1. 建立 PRD**
