@@ -104,8 +104,8 @@ fi
 # --- Execute ---
 cd "$SCRIPT_DIR"
 
-sed -i '' "s/\"version\": *\"$current\"/\"version\": \"$next\"/" "$PLUGIN_JSON"
-sed -i '' "s/\"version\": *\"$current\"/\"version\": \"$next\"/" "$MARKETPLACE_JSON"
+sed -i "s/\"version\": *\"$current\"/\"version\": \"$next\"/" "$PLUGIN_JSON"
+sed -i "s/\"version\": *\"$current\"/\"version\": \"$next\"/" "$MARKETPLACE_JSON"
 git add plugins/ralph/.claude-plugin/plugin.json .claude-plugin/marketplace.json
 git commit -m "chore: bump version to $next"
 git tag "v$next"
@@ -114,6 +114,13 @@ git push --tags
 
 "${GH_ARGS[@]}"
 
-echo ""
-echo "Released v$next"
-echo "https://github.com/$(gh repo view --json nameWithOwner -q .nameWithOwner)/releases/tag/v$next"
+REPO_URL="https://github.com/$(gh repo view --json nameWithOwner -q .nameWithOwner)"
+
+claude plugin marketplace update ralph-in-claude
+claude plugin update ralph@ralph-in-claude
+
+cat <<EOF
+
+Released v$next
+$REPO_URL/releases/tag/v$next
+EOF
