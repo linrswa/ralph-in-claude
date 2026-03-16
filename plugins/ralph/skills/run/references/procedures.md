@@ -84,5 +84,5 @@ Read `references/wave-review-prompt-template.md` and substitute all placeholders
    ```
 4. Create corresponding task with `TaskCreate`, wire dependencies.
 5. Mark original story as pending: `TaskUpdate(taskId: storyIdToTaskId[story.id], status: "pending")`
-6. Append to story notes: `"Attempt N: merge conflict, remediation <US-REM-NNN> created"`
+6. Append to story notes: `"Attempt N failed: merge conflict, remediation <US-REM-NNN> created"`
 7. `CLEANUP_WORKTREE(story)`

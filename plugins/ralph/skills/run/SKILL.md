@@ -47,17 +47,18 @@ Store the final max-agents value for use in §3.2.
 
 ## 1. Initialization
 
-1. **Read prd.json** at the path determined in §0.
-2. **Verify template files exist:** `references/subagent-prompt-template.md`, `references/wave-review-prompt-template.md`, `references/wave-coordinator-prompt-template.md`. If any are missing, report the specific missing files and stop.
-3. **Read `.ralph-in-claude/progress.txt`** if it exists — extract the `## Codebase Patterns` section for passing to workers.
-4. **Read the source PRD** from the `sourcePrd` field for additional context.
-5. **Read `conflictStrategy`** from prd.json (defaults to `"conservative"` if absent). Log which mode is active:
+1. **Read `references/procedures.md`** — load all named procedures (TYPECHECK, TIMESTAMP, CLEANUP_WORKTREE, MARK_PASS, etc.) before anything else.
+2. **Read prd.json** at the path determined in §0.
+3. **Verify template files exist:** `references/subagent-prompt-template.md`, `references/wave-review-prompt-template.md`, `references/wave-coordinator-prompt-template.md`. If any are missing, report the specific missing files and stop.
+4. **Read `.ralph-in-claude/progress.txt`** if it exists — extract the `## Codebase Patterns` section for passing to workers.
+5. **Read the source PRD** from the `sourcePrd` field for additional context.
+6. **Read `conflictStrategy`** from prd.json (defaults to `"conservative"` if absent). Log which mode is active:
    - `"conservative"` — all sharedFiles overlaps defer to separate waves (maximum safety)
    - `"optimistic"` — only `structural-modify` overlaps defer; `append-only` overlaps run in parallel
-6. **Check git branch** — ensure you're on the branch specified by `branchName`. If not:
+7. **Check git branch** — ensure you're on the branch specified by `branchName`. If not:
    - If the branch exists: `git checkout <branchName>`
    - If not: `git checkout -b <branchName>` from `baseBranch` (default: `main`)
-7. **Clean up orphan worktrees** from crashed previous runs:
+8. **Clean up orphan worktrees** from crashed previous runs:
    ```bash
    if [ -d ".ralph-in-claude/worktrees" ]; then
      for wt in .ralph-in-claude/worktrees/*/; do
@@ -67,8 +68,8 @@ Store the final max-agents value for use in §3.2.
    git worktree prune
    git branch --list 'ralph-worker-*' | xargs -r git branch -D
    ```
-8. **Initialize `storyIdToTaskId`** — internal mapping from story IDs (e.g., `"US-001"`) to TaskCreate-returned task IDs.
-9. **Write `.ralph-in-claude/state.json`** — powers the WebGUI Kanban view:
+9. **Initialize `storyIdToTaskId`** — internal mapping from story IDs (e.g., `"US-001"`) to TaskCreate-returned task IDs.
+10. **Write `.ralph-in-claude/state.json`** — powers the WebGUI Kanban view:
    ```json
    {
      "status": "running | completed",
@@ -93,7 +94,7 @@ Store the final max-agents value for use in §3.2.
    ```
    Use `TIMESTAMP()` for all timestamps. Initialize with `status: "running"`, `currentWave: 0`, empty `workers` and `failedStories`.
 
-10. **Subagent types reference:**
+11. **Subagent types reference:**
 
     | Subagent Type | Definition File | Purpose |
     |---|---|---|

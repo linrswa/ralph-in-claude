@@ -50,13 +50,15 @@ The key difference between a mediocre conversion and a great one is **codebase a
 
 After validating the PRD, explore the actual codebase. This grounds the conversion in reality — real file paths, real patterns, real shared files — instead of guessing from PRD text alone.
 
+**Shortcut:** If the PRD already contains concrete codebase context (file paths, patterns, Technical Considerations referencing actual code) — e.g., from a `ralph:prd` run that explored the codebase — you can use that as a starting point and focus exploration on gaps: verifying paths still exist, finding files not mentioned in the PRD, and identifying shared files across stories.
+
 ### 3a. Map project structure
 
-Use **Glob** to understand the layout:
-- Source files: `**/*.ts`, `**/*.tsx`, `**/*.js`, `**/*.jsx`
-- Config: `**/package.json`, `**/tsconfig.json`, `**/*.config.*`
-- Data layer: `**/schema.*`, `**/migration*/**`, `**/prisma/**`
-- Tests: `**/*.test.*`, `**/*.spec.*`
+Use **Glob** to understand the layout. Detect the language/framework first (check for `package.json`, `Cargo.toml`, `go.mod`, `pyproject.toml`, etc.), then search with appropriate patterns:
+- Source files: `**/*.ts`, `**/*.tsx`, `**/*.rs`, `**/*.go`, `**/*.py`, etc. — match the project's language
+- Config: `**/package.json`, `**/tsconfig.json`, `**/Cargo.toml`, `**/go.mod`, `**/*.config.*`
+- Data layer: `**/schema.*`, `**/migration*/**`, `**/prisma/**`, `**/sqlx/**`, `**/alembic/**`
+- Tests: `**/*.test.*`, `**/*.spec.*`, `**/*_test.*`, `**/test_*.*`
 
 Build a mental map of key directories (e.g., `src/routes/`, `src/components/`, `src/lib/`).
 
@@ -255,7 +257,7 @@ Add ability to mark tasks with different statuses.
       "sharedFiles": [{ "file": "prisma/schema.prisma", "conflictType": "structural-modify", "reason": "adds status field to Task model" }],
       "priority": 1,
       "passes": false,
-      "notes": "Add a TaskStatus enum to prisma/schema.prisma above the Task model — follow the pattern of the existing Priority enum. Add a 'status' field to Task with @default(PENDING). Run `npx prisma migrate dev --name add-task-status`. Update src/types/task.ts to include the new status field in TaskWithUser type."
+      "notes": "Files: Modify prisma/schema.prisma, update src/types/task.ts\nPattern: Follow the existing Priority enum in schema.prisma for the new TaskStatus enum\nImplementation: Add TaskStatus enum (PENDING, IN_PROGRESS, DONE) above the Task model. Add a 'status' field to Task with @default(PENDING). Run `npx prisma migrate dev --name add-task-status`.\nGotcha: Update the TaskWithUser type in src/types/task.ts to include the new status field"
     },
     {
       "id": "US-002",
@@ -271,7 +273,7 @@ Add ability to mark tasks with different statuses.
       "sharedFiles": [],
       "priority": 2,
       "passes": false,
-      "notes": "Create src/components/StatusBadge.tsx — follow the exact pattern in src/components/PriorityBadge.tsx (color map + cn() utility for styling). Import TaskStatus from @prisma/client. Add the badge to src/components/TaskCard.tsx next to the existing PriorityBadge."
+      "notes": "Files: Create src/components/StatusBadge.tsx, modify src/components/TaskCard.tsx\nPattern: Follow the exact pattern in src/components/PriorityBadge.tsx (color map + cn() utility)\nAPIs: Import TaskStatus from @prisma/client, cn() from src/lib/utils.ts\nImplementation: Add the badge to TaskCard.tsx next to the existing PriorityBadge"
     },
     {
       "id": "US-003",
@@ -288,7 +290,7 @@ Add ability to mark tasks with different statuses.
       "sharedFiles": [],
       "priority": 3,
       "passes": false,
-      "notes": "Modify src/components/TaskCard.tsx to add a status dropdown. Use the existing updateTask server action from src/server/actions/tasks.ts. Import TaskStatus enum from @prisma/client for the dropdown options. Use the cn() utility from src/lib/utils.ts for styling."
+      "notes": "Files: Modify src/components/TaskCard.tsx\nPattern: Use existing updateTask server action from src/server/actions/tasks.ts\nAPIs: Import TaskStatus from @prisma/client, cn() from src/lib/utils.ts\nImplementation: Add a status dropdown to each task card. Changing status should call updateTask and update UI without page refresh"
     },
     {
       "id": "US-004",
@@ -304,7 +306,7 @@ Add ability to mark tasks with different statuses.
       "sharedFiles": [],
       "priority": 4,
       "passes": false,
-      "notes": "Create src/components/StatusFilter.tsx — follow the PriorityBadge pattern for styling. Modify src/app/tasks/page.tsx to add the filter component and read searchParams. Update getTasks query in src/server/queries/tasks.ts to accept an optional status filter parameter using Prisma where clause."
+      "notes": "Files: Create src/components/StatusFilter.tsx, modify src/app/tasks/page.tsx, modify src/server/queries/tasks.ts\nPattern: Follow PriorityBadge pattern for filter component styling\nImplementation: Add filter dropdown to tasks/page.tsx reading searchParams. Update getTasks query to accept optional status filter via Prisma where clause.\nGotcha: Filter must persist in URL params for shareable links"
     }
   ]
 }
