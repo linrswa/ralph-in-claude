@@ -2,14 +2,25 @@
 
 All notable changes to this project are documented in this file.
 
+## v0.5.0
+
+- Added `ralph:research` skill for pre-PRD feature discovery — spawns parallel research agents to explore feasibility, architecture, existing code, prior art, scope, and risks.
+- Added `research-worker` (Sonnet) and `research-architect` (Opus) agents.
+- Research reports save to `.ralph-in-claude/research/` and feed into `ralph:prd`.
+
 ## v0.4.8
 
-- Fixed review issues in prd, convert, and run skills.
+- Added codebase exploration to `ralph:prd` and `ralph:convert` — both skills now scan the actual codebase before generating output, producing PRDs with implementation notes and prd.json with concrete file paths and validated dependencies.
+- Moved `ralph:run` procedures to `references/procedures.md`; added mental model overview and "why" explanations for key design decisions (direct vs worktree mode, sequential merge, wave review phases).
+- Fixed multi-language glob patterns in convert codebase analysis, structured notes format in convert examples, and consistent error message format across run and procedures.
 - Added plugin update instructions to README.
 
 ## v0.4.7
 
-- Improved all three ralph skills (`prd`, `convert`, `run`) based on quality review.
+- Refactored all three skills to be more modular:
+  - `ralph:prd`: added no-arg handling, slug conventions, directory checks, overwrite protection.
+  - `ralph:convert`: added input/output validation, extracted conflict analysis to `references/conflict-analysis.md`, smart `baseBranch` defaults.
+  - `ralph:run`: decomposed merge pipeline and wave review process into separate reference docs (472→373 lines), added template verification and error handling.
 
 ## v0.4.6
 

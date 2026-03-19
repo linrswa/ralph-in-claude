@@ -7,15 +7,15 @@
 
 An autonomous AI agent system for [Claude Code](https://claude.ai/code) that iteratively implements features from a PRD. Inspired by [Geoffrey Huntley's Ralph pattern](https://ghuntley.com/ralph/).
 
-Packaged as a **Claude Code plugin** with three namespaced skills: `ralph:prd`, `ralph:convert`, `ralph:run`.
+Packaged as a **Claude Code plugin** with four namespaced skills: `ralph:research`, `ralph:prd`, `ralph:convert`, `ralph:run`.
 
 ## 📰 Recent Updates
 
-**v0.4.8** — Improved all three skills based on quality review; added codebase exploration to `ralph:prd` and `ralph:convert`; optimized `ralph:run` structure; added plugin update instructions.
+**v0.5.0** — Added `ralph:research` skill for pre-PRD feature discovery. Spawns parallel research agents to explore feasibility, architecture, existing code, prior art, scope, and risks. Produces a structured research report that feeds into `ralph:prd`.
+
+**v0.4.8** — Improved all three core skills based on quality review; added codebase exploration to `ralph:prd` and `ralph:convert`; optimized `ralph:run` structure; added plugin update instructions.
 
 **v0.4.5 ~ v0.4.6** — Moved plugin files to `plugins/ralph/` sub-directory for clean marketplace install; renamed marketplace to `ralph-in-claude`; added cleanup rules to ralph-worker agent.
-
-**v0.4.4** — Added "no model override" constraint — dispatcher must not set the `model` parameter when spawning subagents; each agent definition controls its own model. Clarified phase/wave terminology.
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
@@ -143,6 +143,14 @@ claude plugin update ralph@ralph-in-claude
 
 ## 🚀 Workflow
 
+**0. Research (optional)**
+
+```
+/ralph:research [feature idea or problem statement]
+```
+
+Spawns parallel research agents to explore feasibility, architecture, existing code, prior art, and risks. Produces a structured report saved to `.ralph-in-claude/research/`. Use this before writing a PRD to surface unknowns and trade-offs.
+
 **1. Create a PRD**
 
 ```
@@ -198,6 +206,8 @@ ralph-in-claude/
 │       │   └── settings.json           # Plugin permissions
 │       ├── agents/
 │       │   ├── ralph-worker.md         # Worker agent definition
+│       │   ├── research-worker.md      # Sonnet agent — research angle investigator
+│       │   ├── research-architect.md   # Opus agent — architecture & design research
 │       │   ├── wave-reviewer.md        # Sonnet agent — post-wave consistency review
 │       │   └── wave-coordinator.md     # Opus agent — escalated wave issue resolution
 │       ├── hooks/
@@ -206,6 +216,12 @@ ralph-in-claude/
 │       │   ├── ensure-ralph-dir.sh     # Hook: auto-creates .ralph-in-claude/ dir
 │       │   └── validate-prd-write.sh   # Hook: validates prd.json schema (9 checks)
 │       ├── skills/
+│       │   ├── research/
+│       │   │   ├── SKILL.md            # ralph:research — parallel feature research
+│       │   │   └── references/
+│       │   │       ├── architect-prompt-template.md
+│       │   │       ├── researcher-prompt-template.md
+│       │   │       └── synthesis-guidelines.md
 │       │   ├── prd/
 │       │   │   └── SKILL.md            # ralph:prd — PRD generator
 │       │   ├── convert/
