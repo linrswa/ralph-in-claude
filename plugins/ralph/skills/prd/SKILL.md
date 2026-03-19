@@ -22,6 +22,23 @@ Create detailed Product Requirements Documents that are clear, actionable, and s
 
 ---
 
+## Step 0: Check for Research Report
+
+Before starting, scan `.ralph-in-claude/tasks/research-*.md`:
+
+- **0 files** → proceed normally (Step 1)
+- **1 file** → read it and use as additional context. The research report's Executive Summary, Recommended Architecture, Codebase Impact, and Suggested Story Decomposition are valuable inputs — they reduce the number of clarifying questions needed and provide pre-validated architectural decisions.
+- **2+ files** → use `AskUserQuestion` with the file list as options, asking which research report to use (or "None — start fresh")
+
+When a research report is available, incorporate its findings throughout the PRD:
+- Architecture recommendations → inform story structure and Technical Considerations
+- Suggested Story Decomposition → use as a starting point for User Stories
+- Codebase Impact → feed directly into story Notes
+- Risks → include in Technical Considerations and acceptance criteria
+- Open Questions (with user answers) → reduce clarifying questions needed
+
+---
+
 ## Step 1: Codebase Exploration
 
 Before asking questions or writing anything, explore the project to understand what exists. This context directly feeds into better stories, accurate notes, and correct dependency ordering — all of which reduce worker failures downstream.

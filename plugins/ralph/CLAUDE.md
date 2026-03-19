@@ -8,9 +8,10 @@ Ralph is an autonomous AI agent loop that iteratively implements features from a
 
 ## How It Works
 
-1. Create a PRD describing your feature
-2. Convert to `prd.json` format
-3. Run `./ralph.sh` to start the autonomous loop
+1. *(Optional)* Research the feature idea to explore feasibility, architecture, and risks
+2. Create a PRD describing your feature (informed by research if available)
+3. Convert to `prd.json` format
+4. Run `./ralph.sh` to start the autonomous loop
 4. Ralph picks the highest-priority incomplete story
 5. Implements it, runs quality checks, commits
 6. After each multi-story wave, runs a wave review to catch cross-cutting consistency issues
@@ -86,11 +87,14 @@ Convert a PRD markdown file to Ralph's JSON format:
 | File | Purpose |
 |------|---------|
 | `.claude-plugin/plugin.json` | Plugin manifest |
+| `skills/research/SKILL.md` | `ralph:research` — parallel feature research & discovery |
 | `skills/prd/SKILL.md` | `ralph:prd` — PRD generator |
 | `skills/convert/SKILL.md` | `ralph:convert` — PRD-to-JSON converter |
 | `scripts/` | Shared hook scripts (ensure-ralph-dir, validate-prd-write) |
 | `skills/run/SKILL.md` | `ralph:run` — parallel story dispatcher |
 | `skills/run/references/subagent-prompt-template.md` | Worker prompt template with placeholders |
+| `agents/research-worker.md` | Sonnet agent — research angle investigator |
+| `agents/research-architect.md` | Opus agent — architecture & design research |
 | `agents/wave-reviewer.md` | Sonnet agent — post-wave consistency review |
 | `agents/wave-coordinator.md` | Opus agent — escalated wave issue resolution |
 | `ralph.sh` | Bash Loop fallback — spawns Claude iterations |
