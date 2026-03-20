@@ -11,11 +11,11 @@ Packaged as a **Claude Code plugin** with four namespaced skills: `ralph:researc
 
 ## 📰 Recent Updates
 
+**v0.6.0** — **[Experimental] Team mode for `ralph:research`**. When 4+ research agents are spawned, agents can optionally join a shared team and exchange intermediate findings in real-time via `SendMessage`. Requires enabling `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in settings (see [Team Mode](#-team-mode-experimental) below).
+
 **v0.5.0** — Added `ralph:research` skill for pre-PRD feature discovery. Spawns parallel research agents to explore feasibility, architecture, existing code, prior art, scope, and risks. Produces a structured research report that feeds into `ralph:prd`.
 
 **v0.4.8** — Improved all three core skills based on quality review; added codebase exploration to `ralph:prd` and `ralph:convert`; optimized `ralph:run` structure; added plugin update instructions.
-
-**v0.4.5 ~ v0.4.6** — Moved plugin files to `plugins/ralph/` sub-directory for clean marketplace install; renamed marketplace to `ralph-in-claude`; added cleanup rules to ralph-worker agent.
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
@@ -149,7 +149,7 @@ claude plugin update ralph@ralph-in-claude
 /ralph:research [feature idea or problem statement]
 ```
 
-Spawns parallel research agents to explore feasibility, architecture, existing code, prior art, and risks. Produces a structured report saved to `.ralph-in-claude/research/`. Use this before writing a PRD to surface unknowns and trade-offs.
+Spawns parallel research agents to explore feasibility, architecture, existing code, prior art, and risks. Produces a structured report saved to `.ralph-in-claude/tasks/`. Use this before writing a PRD to surface unknowns and trade-offs. Supports optional [team mode](#-team-mode-experimental) for complex research (4+ agents).
 
 **1. Create a PRD**
 
@@ -308,6 +308,39 @@ The project-level `conflictStrategy` controls how the dispatcher handles overlap
 - **Dispatcher:** typecheck after each wave, `git merge --no-ff` per worker branch, retries failed stories up to 3 times
 - **Wave review:** after each multi-story wave, a three-phase review runs: **Phase A** resolves any deferred merge conflicts (Tier 3) with full wave context — the Sonnet reviewer attempts resolution first, escalating to the Opus coordinator if needed; **Phase B** checks the combined diff for cross-cutting consistency issues (naming, imports, style), with major issues escalated to the coordinator; **Phase C** performs bridge work for the next wave (e.g., inserting append-only marker comments in shared files to enable safe parallel modification).
 - **Hooks:** validates prd.json schema on every Write/Edit (JSON integrity, required fields, `dependsOn` referential check)
+
+## 🧪 Team Mode (Experimental)
+
+The `ralph:research` skill supports an optional **team mode** for complex research (4+ agents). In team mode, research agents join a shared team and can share intermediate discoveries via `SendMessage` — for example, the Codebase Analysis agent discovering a critical pattern can immediately inform the Architecture agent, rather than waiting for the coordinator to synthesize after all agents finish.
+
+### How it works
+
+- **3 agents or fewer**: Normal parallel mode (no team). Agents work in isolation.
+- **4+ agents**: Team mode is offered as an option at Checkpoint 1. If the user's prompt contains team intent keywords (e.g., "team", "swarm", "組隊", "協作"), team mode auto-enables.
+- Agents check peer discoveries at **two checkpoints** (mid-exploration and pre-report) to avoid duplicated work and redirect research based on early findings.
+
+### Enabling team mode
+
+Team mode requires the Claude Code experimental agent teams feature. Add this to your settings (`~/.claude/settings.json`):
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  }
+}
+```
+
+If the feature is not enabled, the skill will inform you how to enable it and fall back to normal parallel mode.
+
+### When to use team mode
+
+Team mode is most valuable when:
+- Research angles have **strong cross-cutting dependencies** (e.g., a feasibility constraint that changes architectural design)
+- Multiple agents are likely to **discover the same core issue independently** (team mode lets the first discoverer broadcast, saving others from duplicating)
+- The topic is **ambiguous** with many unknowns (more benefit from early findings sharing)
+
+For well-defined topics with clear codebase evidence, normal parallel mode produces comparable results at lower token cost.
 
 ## 🐛 Debugging
 

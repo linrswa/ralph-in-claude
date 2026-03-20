@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## v0.6.0
+
+- **[Experimental] Team mode for `ralph:research`** — when 4+ research agents are needed, agents can optionally join a shared team and exchange intermediate findings via `SendMessage`. Agents check peer discoveries at mid-exploration and pre-report checkpoints to avoid duplicated work, redirect research based on early findings, and produce deeper non-redundant analysis. Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in Claude Code settings to enable.
+- Team mode is offered as an option at Checkpoint 1 for 3+ agents. Auto-enables when the user's prompt contains team intent keywords (e.g., "team", "swarm", "組隊", "協作").
+- Added `{{TEAM_COLLABORATION}}` placeholder to prompt templates for dynamic team instructions injection.
+- Updated synthesis guidelines with team mode considerations (cross-team confirmations, adaptation signals).
+
 ## v0.5.0
 
 - Added `ralph:research` skill for pre-PRD feature discovery — spawns parallel research agents to explore feasibility, architecture, existing code, prior art, scope, and risks.
