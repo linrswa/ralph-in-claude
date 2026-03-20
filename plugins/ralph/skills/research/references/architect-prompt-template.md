@@ -39,6 +39,8 @@ Design and compare architectural approaches for the following feature:
 4. What are the trade-offs between approaches?
 5. What's the recommended approach and why?
 
+{{TEAM_COLLABORATION}}
+
 ## Output Format
 
 Structure your findings using the report format defined in your agent instructions (Current Architecture, Approaches with Comparison Matrix, Recommendation, Risks/Concerns, References).

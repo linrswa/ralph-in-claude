@@ -19,12 +19,13 @@ The goal is to help users think through what they actually need before committin
 1. Receive a feature idea or problem statement
 2. Quick codebase scan to understand project context
 3. Select 3-5 research angles based on the topic's nature
-4. **Checkpoint 1:** Present angles to user for confirmation
-5. Spawn parallel research agents (default 3, up to 8 for complex topics)
-6. Collect and synthesize findings
-7. **Checkpoint 2:** Present findings, allow deep-dive requests
-8. **Checkpoint 3:** Confirm handoff to `/ralph:prd`
-9. Save research report
+4. Determine execution mode (normal vs team)
+5. **Checkpoint 1:** Present angles (and team mode option if 3+ agents) to user for confirmation
+6. Spawn parallel research agents
+7. Collect and synthesize findings
+8. **Checkpoint 2:** Present findings, allow deep-dive requests
+9. **Checkpoint 3:** Confirm handoff to `/ralph:prd`
+10. Save research report and clean up team (if used)
 
 ---
 
@@ -99,9 +100,54 @@ The maximum is 8 agents. If you assess the topic as needing more than 3, you MUS
 
 ---
 
+## 2.5 Team Mode Detection
+
+When more than 3 agents are needed, **team mode** becomes available. In team mode, research agents join a shared team and can exchange intermediate findings via `SendMessage` — for example, the "Codebase Analysis" agent discovering a critical pattern can immediately inform the "Architecture" agent, rather than waiting for the coordinator to synthesize after all agents finish.
+
+### Decision Logic
+
+1. **3 agents or fewer** → always use normal mode (parallel fire-and-forget). Skip this section entirely.
+2. **More than 3 agents** → evaluate team mode:
+   a. **User's prompt signals team intent** (e.g., contains words like "team", "collaborate", "協作", "組隊", "swarm", or explicitly requests team-based research) → **auto-enable team mode**, skip the team question at Checkpoint 1.
+   b. **No explicit team intent** → **offer team mode as an option** at Checkpoint 1 (see §3).
+
+### Checking Team Feature Availability
+
+Before enabling team mode, verify the feature is available:
+
+```bash
+echo $CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
+```
+
+- If the output is `1` → team feature is available, proceed with team mode.
+- If empty or missing → team feature is not enabled. Inform the user:
+
+  > Team mode is available for 3+ agent research but requires enabling the experimental teams feature. To enable it, add this to your Claude Code settings (`~/.claude/settings.json`):
+  > ```json
+  > { "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }
+  > ```
+  > Proceeding with normal parallel mode for now.
+
+  Then fall back to normal mode for this session.
+
+### What Team Mode Changes
+
+| Aspect | Normal Mode | Team Mode |
+|--------|------------|-----------|
+| Agent communication | None — agents work in isolation | Agents share key discoveries via `SendMessage` |
+| Coordination | Coordinator synthesizes after all complete | Agents can adapt mid-research based on peers' findings |
+| Token cost | Lower | ~10-20% higher due to inter-agent messages |
+| Best for | Simple/focused research (3 agents) | Complex cross-cutting research (4+ agents) |
+
+Set an internal flag `TEAM_MODE = true/false` to control dispatch behavior in §4.
+
+---
+
 ## 3. Checkpoint 1 — Angle Selection
 
-Use `AskUserQuestion` to present the planned research angles and let the user adjust. Format:
+Use `AskUserQuestion` to present the planned research angles and let the user adjust.
+
+### Format (3 agents — normal mode)
 
 ```
 I've analyzed the project and your feature idea. Here's my research plan:
@@ -121,6 +167,34 @@ B) Add an angle: [suggest one that was excluded and why it might help]
 C) Remove an angle: [identify which one is least valuable]
 D) Modify: let me describe what I want changed
 ```
+
+### Format (3+ agents — team mode eligible)
+
+If team mode was NOT auto-enabled by user intent (see §2.5), add a team mode option:
+
+```
+I've analyzed the project and your feature idea. Here's my research plan:
+
+**Feature:** [feature description]
+**Complexity:** [Moderate/Complex] — [N layers, M unknowns]
+**Agents:** [N]
+
+**Research angles:**
+1. [Angle name] — [what it will investigate]
+2. [Angle name] — [what it will investigate]
+3. [Angle name] — [what it will investigate]
+4. [Angle name] — [what it will investigate]
+
+**Team mode available:** With [N] agents, team mode lets agents share discoveries in real-time — e.g., the Codebase Analysis agent can inform the Architecture agent about existing patterns mid-research. Costs ~10-20% more tokens but produces better-connected findings for complex topics.
+
+Options:
+A) Proceed with team mode
+B) Proceed without team mode (normal parallel)
+C) Add/remove/modify angles
+D) Modify: let me describe what I want changed
+```
+
+If team mode was auto-enabled, show the plan with a note: **"Team mode: enabled (based on your request)"** and don't offer the B option.
 
 If the user requests changes, adjust and confirm again.
 
@@ -145,8 +219,11 @@ For each angle, substitute placeholders in the appropriate template:
 - `{{PROJECT_STRUCTURE}}` → summary of key directories and patterns
 - `{{RELATED_CODE}}` → existing code related to the feature
 - `{{USER_CONSTRAINTS}}` → any constraints the user mentioned
+- `{{TEAM_COLLABORATION}}` → team collaboration instructions (see §4.3), or empty string if normal mode
 
 ### 4.3 Dispatch
+
+#### Normal Mode (TEAM_MODE = false)
 
 Spawn all agents in a **single message** with parallel `Agent` calls:
 
@@ -155,15 +232,86 @@ For each angle:
   Agent(
     subagent_type: "ralph:research-worker" or "ralph:research-architect",
     description: "Research: <angle-name>",
-    prompt: <generated prompt>,
+    prompt: <generated prompt with {{TEAM_COLLABORATION}} = "">,
     run_in_background: true,
     name: "research-<angle-slug>"
   )
 ```
 
+#### Team Mode (TEAM_MODE = true)
+
+**Step 1:** Create the research team:
+
+```
+TeamCreate(
+  team_name: "research-<feature-slug>",
+  description: "Parallel research for: <feature description>"
+)
+```
+
+**Step 2:** Create tasks for each angle:
+
+```
+For each angle:
+  TaskCreate(
+    title: "Research: <angle-name>",
+    description: "<angle instructions summary>"
+  )
+```
+
+**Step 3:** Spawn agents as team members and fill in `{{TEAM_COLLABORATION}}` with these instructions:
+
+```
+## Team Collaboration
+
+You are part of a research team investigating this feature from multiple angles simultaneously.
+Your teammates are researching other angles — sharing key discoveries helps everyone produce better findings.
+
+### Sharing discoveries (outbound)
+
+**When to share:** As soon as you discover something that would meaningfully change how another agent approaches their angle — don't wait until your report is done. Examples:
+- A critical constraint or limitation that affects design choices
+- An existing pattern or component that others should know about
+- A dependency conflict or version issue that limits options
+
+**How to share:**
+- Use `SendMessage(to: "*", message: "<your discovery>", summary: "<5-word summary>")` to broadcast to all teammates
+- Keep messages short and actionable (2-3 sentences max)
+- Don't share routine findings — only things that would change another agent's approach
+
+### Checking peer discoveries (inbound)
+
+**Check messages at two points during your research:**
+
+1. **Mid-exploration checkpoint** — after your initial scan (reading key files, understanding the landscape) but BEFORE deep-diving into analysis. If a teammate already found something relevant, adapt your approach:
+   - Skip areas they've already covered in depth
+   - Dig deeper into areas they flagged as important but didn't fully explore
+   - Adjust your analysis to account for constraints they discovered
+
+2. **Pre-report checkpoint** — before writing your final report. Incorporate any late-arriving findings into your analysis and note cross-team confirmations.
+
+The goal is to redirect your research based on peer findings early enough to save tokens and produce deeper, non-redundant analysis. If you see a teammate already discovered something you were about to investigate, pivot to a different aspect of your angle instead of duplicating their work.
+
+**Budget: 0-3 messages per agent.** The goal is avoiding duplicated effort and surfacing cross-cutting connections, not having a conversation.
+```
+
+Spawn agents in a **single message**:
+
+```
+For each angle:
+  Agent(
+    subagent_type: "ralph:research-worker" or "ralph:research-architect",
+    description: "Research: <angle-name>",
+    prompt: <generated prompt with {{TEAM_COLLABORATION}} filled in>,
+    run_in_background: true,
+    name: "research-<angle-slug>",
+    team_name: "research-<feature-slug>"
+  )
+```
+
 Do NOT set the `model` parameter — let each agent's definition control its own model.
 
-While agents are running, inform the user that research is in progress and how many agents were dispatched.
+While agents are running, inform the user that research is in progress, how many agents were dispatched, and whether team mode is active.
 
 ---
 
@@ -175,6 +323,13 @@ After all agents return:
 2. **Follow the synthesis guidelines** in `references/synthesis-guidelines.md` to combine findings
 3. **Identify cross-cutting insights** — patterns, contradictions, or connections across angles
 4. **Flag open questions** — items that need user input before PRD generation
+
+### Team Mode Bonus
+
+In team mode, agents may have already cross-pollinated findings via `SendMessage`. During synthesis:
+- Note which discoveries were shared between agents (these are higher-confidence findings)
+- Check if agents adapted their analysis based on peer messages — this is a sign the team mode added value
+- Mention in the report if team collaboration surfaced insights that wouldn't have appeared in isolated research
 
 ---
 
@@ -231,6 +386,7 @@ Save to `.ralph-in-claude/tasks/research-[feature-slug].md` with this structure:
 **Generated:** [timestamp]
 **Feature:** [original feature description]
 **Angles investigated:** [list]
+**Mode:** [Normal / Team]
 
 ---
 
@@ -293,7 +449,11 @@ Save to `.ralph-in-claude/tasks/research-[feature-slug].md` with this structure:
 
 ## 8. Checkpoint 3 — Handoff
 
-After saving, tell the user:
+If team mode was used, clean up:
+1. Send shutdown requests to all remaining team members (they should already be done, but be safe)
+2. Call `TeamDelete` to remove the team and its task list
+
+After saving and cleanup, tell the user:
 
 > Research saved to `.ralph-in-claude/tasks/research-[slug].md`.
 > Next step: run `/ralph:prd` to generate a PRD informed by this research.
@@ -312,3 +472,4 @@ Before saving the report:
 - [ ] Open questions addressed or documented
 - [ ] Report follows the output structure
 - [ ] Report saved to `.ralph-in-claude/tasks/research-[slug].md`
+- [ ] If team mode was used: team cleaned up (shutdown + TeamDelete)

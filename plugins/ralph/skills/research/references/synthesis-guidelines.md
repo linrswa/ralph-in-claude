@@ -43,6 +43,15 @@ Before finalizing:
 - Open Questions are genuinely unresolved (not things you could answer from the findings)
 - Risks have both severity AND mitigation suggestions
 
+## Team Mode Considerations
+
+When research was conducted in team mode (agents sharing findings via `SendMessage`):
+
+- **Shared discoveries carry extra weight** — if an agent found something important enough to broadcast, and other agents incorporated it, that finding is well-validated
+- **Look for adaptation signals** — did agents change their approach based on peer messages? Note these in the report as evidence of cross-cutting insights
+- **Check for message-driven convergence** — agents independently reaching similar conclusions is strong evidence; agents converging _because_ of shared messages is weaker (but still useful)
+- **Add a "Team Insights" note** in the Executive Summary if team collaboration surfaced something that isolated research likely would have missed
+
 ## Tone
 
 - **Decisive but honest** — make clear recommendations while acknowledging uncertainty
