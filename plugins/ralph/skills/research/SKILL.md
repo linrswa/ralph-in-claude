@@ -19,8 +19,8 @@ The goal is to help users think through what they actually need before committin
 1. Receive a feature idea or problem statement
 2. Quick codebase scan to understand project context
 3. Select 3-5 research angles based on the topic's nature
-4. Determine execution mode (normal vs team)
-5. **Checkpoint 1:** Present angles (and team mode option if 3+ agents) to user for confirmation
+4. **Determine execution mode:** if 4+ agents selected → go to §2.5 to offer team mode. Do NOT skip this step.
+5. **Checkpoint 1:** Present angles and team mode option (if 4+ agents) to user for confirmation
 6. Spawn parallel research agents
 7. Collect and synthesize findings
 8. **Checkpoint 2:** Present findings, allow deep-dive requests
@@ -98,18 +98,20 @@ Use this decision tree to assess complexity:
 
 The maximum is 8 agents. If you assess the topic as needing more than 3, you MUST state the layer count and unknown count to justify it at Checkpoint 1.
 
+**After selecting your agent count, proceed immediately to §2.5 to set the execution mode before moving to Checkpoint 1. Do not skip §2.5.**
+
 ---
 
 ## 2.5 Team Mode Detection
 
-When more than 3 agents are needed, **team mode** becomes available. In team mode, research agents join a shared team and can exchange intermediate findings via `SendMessage` — for example, the "Codebase Analysis" agent discovering a critical pattern can immediately inform the "Architecture" agent, rather than waiting for the coordinator to synthesize after all agents finish.
+When more than 3 agents are needed, **team mode becomes available** and MUST be offered to the user at Checkpoint 1. In team mode, research agents join a shared team and can exchange intermediate findings via `SendMessage` — for example, the "Codebase Analysis" agent discovering a critical pattern can immediately inform the "Architecture" agent, rather than waiting for the coordinator to synthesize after all agents finish.
 
 ### Decision Logic
 
 1. **3 agents or fewer** → always use normal mode (parallel fire-and-forget). Skip this section entirely.
-2. **More than 3 agents** → evaluate team mode:
+2. **More than 3 agents** → you MUST offer team mode at Checkpoint 1. Default is normal parallel mode, but present team mode as an option so the user can choose:
    a. **User's prompt signals team intent** (e.g., contains words like "team", "collaborate", "協作", "組隊", "swarm", or explicitly requests team-based research) → **auto-enable team mode**, skip the team question at Checkpoint 1.
-   b. **No explicit team intent** → **offer team mode as an option** at Checkpoint 1 (see §3).
+   b. **No explicit team intent** → **present both options** at Checkpoint 1 (see §3), with normal parallel as the default.
 
 ### Checking Team Feature Availability
 
@@ -168,9 +170,9 @@ C) Remove an angle: [identify which one is least valuable]
 D) Modify: let me describe what I want changed
 ```
 
-### Format (3+ agents — team mode eligible)
+### Format (4+ agents — team mode available)
 
-If team mode was NOT auto-enabled by user intent (see §2.5), add a team mode option:
+When 4+ agents are selected and the user didn't explicitly request team mode, you MUST present team mode as an option. Do not skip this — it is the whole point of §2.5.
 
 ```
 I've analyzed the project and your feature idea. Here's my research plan:
@@ -188,13 +190,13 @@ I've analyzed the project and your feature idea. Here's my research plan:
 **Team mode available:** With [N] agents, team mode lets agents share discoveries in real-time — e.g., the Codebase Analysis agent can inform the Architecture agent about existing patterns mid-research. Costs ~10-20% more tokens but produces better-connected findings for complex topics.
 
 Options:
-A) Proceed with team mode
-B) Proceed without team mode (normal parallel)
+A) Proceed (normal parallel)
+B) Proceed with team mode
 C) Add/remove/modify angles
 D) Modify: let me describe what I want changed
 ```
 
-If team mode was auto-enabled, show the plan with a note: **"Team mode: enabled (based on your request)"** and don't offer the B option.
+If team mode was auto-enabled by user intent, show **"Team mode: enabled (based on your request)"** and don't offer the A/B split.
 
 If the user requests changes, adjust and confirm again.
 
