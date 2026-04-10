@@ -104,8 +104,15 @@ fi
 # --- Execute ---
 cd "$SCRIPT_DIR"
 
-sed -i "s/\"version\": *\"$current\"/\"version\": \"$next\"/" "$PLUGIN_JSON"
-sed -i "s/\"version\": *\"$current\"/\"version\": \"$next\"/" "$MARKETPLACE_JSON"
+if sed --version &>/dev/null; then
+  # GNU sed (Linux)
+  sed -i "s/\"version\": *\"$current\"/\"version\": \"$next\"/" "$PLUGIN_JSON"
+  sed -i "s/\"version\": *\"$current\"/\"version\": \"$next\"/" "$MARKETPLACE_JSON"
+else
+  # BSD sed (macOS)
+  sed -i '' "s/\"version\": *\"$current\"/\"version\": \"$next\"/" "$PLUGIN_JSON"
+  sed -i '' "s/\"version\": *\"$current\"/\"version\": \"$next\"/" "$MARKETPLACE_JSON"
+fi
 git add plugins/ralph/.claude-plugin/plugin.json .claude-plugin/marketplace.json
 git commit -m "chore: bump version to $next"
 git tag "v$next"
